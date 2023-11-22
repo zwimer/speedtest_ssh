@@ -22,7 +22,7 @@ file = "README.md"
 content-type = "text/markdown"
 
 [project.scripts]
-speedtest_ssh = "speedtest_ssh:cli"
+speedtest-ssh = "speedtest_ssh:cli"
 
 [tool.setuptools]
 license-files = ["LICENSE"]

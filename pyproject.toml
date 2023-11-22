@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "speedtest_ssh"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+]
+license = {text = "GPL"}
+description = "A tool meant to check inter-device speeds over ssh"
+urls = {Homepage = "https://github.com/zwimer/speedtest_ssh"}
+requires-python = ">= 3.8"
+dynamic = ["version"]
+dependencies = [
+    "paramiko"
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.scripts]
+speedtest_ssh = "speedtest_ssh:cli"
+
+[tool.setuptools]
+license-files = ["LICENSE"]
+include-package-data = false
+
+[tool.setuptools.packages]
+find = {namespaces = false}
+
+[tool.setuptools.package-data]
+speedtest_ssh = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = {attr = "speedtest_ssh.__version__"}

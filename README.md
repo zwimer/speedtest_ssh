@@ -21,3 +21,8 @@ options:
   --max_seconds MAX_SECONDS
                         A soft limit for how many seconds to spend uploading / downloading
 ```
+
+# Notes
+
+1. This will be subject to your disk read/write speed in `/tmp` on both devices
+2. This uses only one TCP connection (like standard `scp`) rather than multiple like `rsync`.

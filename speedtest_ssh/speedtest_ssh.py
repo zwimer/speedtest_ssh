@@ -34,10 +34,10 @@ def _ur_file(size: int, d: Path) -> Path:
 
 def get_stats(up_ns: int, down_ns: int, size: int) -> tuple[str, str]:
     """
-    :return: Up speed, down speed in MBit/s
+    :return: Up speed, down speed in Mbit/s
     """
     speed = lambda s: 8 * (size/1024**2) / (s/1000**3)
-    return f"{speed(up_ns):.2f} MBit/s", f"{speed(down_ns):.2f} MBit/s"
+    return f"{speed(up_ns):.2f} Mbit/s", f"{speed(down_ns):.2f} Mbit/s"
 
 
 def _iteration(local_d: Path, remote_d: str, ftp: paramiko.SFTPClient, size: int) -> tuple[int, int]:

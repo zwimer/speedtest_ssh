@@ -1,5 +1,5 @@
 # speedtest\_ssh
-A simple tool for a quick and easy speedtest between two machines via ssh
+A simple tool for a quick and easy speedtest between two machines over ssh
 
 # Usage
 

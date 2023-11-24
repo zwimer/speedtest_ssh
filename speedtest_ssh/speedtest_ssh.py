@@ -9,16 +9,46 @@ import time
 import sys
 import os
 
+from tqdm import tqdm
 import paramiko
 
 from . import __version__
 
 
-_max_sec = 20
-_base_size = 16 * (1024**2)
+_base_size = 4 * (1024**2)
+_ssh_timeout = 10
+
+
+class ProgressBar(tqdm):
+    """
+    A small tqdm wrapper for paramiko's SFTP callbacks to use
+    """
+
+    def __init__(self, desc: str):
+        super().__init__(
+            desc=desc,
+            unit=" B",
+            unit_scale=True,
+            unit_divisor=1024,
+            leave=False,
+            dynamic_ncols=True
+        )
+
+    def __call__(self, bytes_done: int, bytes_remaining: int):
+        """
+        :param bytes_done: The number of bytes transferred
+        :param bytes_remaining: The number of bytes yet to be transferred
+        """
+        if self.total is None:
+            self.total = bytes_done + bytes_remaining
+        self.update(bytes_done - self.n)
 
 
 def _ur_file(size: int, d: Path) -> Path:
+    """
+    Create a file in directory d of that is size bytes large
+    :return: The path to the newly created file
+    """
     # sendfile not always supported so we do this the hard way
     done = 0
     block = _base_size
@@ -47,13 +77,14 @@ def _iteration(local_d: Path, remote_d: str, ftp: paramiko.SFTPClient, size: int
     """
     local = str(local_d / "down")
     remote = str(remote_d / "down")
-    print(f"  Testing with size: {size / 1024**2}MB")
     test_f = _ur_file(size, local_d)
     try:
         start: int = time.time_ns()
-        ftp.put(str(test_f), remote)
+        with ProgressBar("Upload") as p:
+            ftp.put(str(test_f), remote, callback=p)
         up: int = time.time_ns() - start
-        ftp.get(remote, local)
+        with ProgressBar("Download") as p:
+            ftp.get(remote, local, callback=p)
         down: int = time.time_ns() - start - up
     finally:
         test_f.unlink()
@@ -68,6 +99,7 @@ def speedtest_ssh(host: str, max_seconds: int, **kwargs: str) -> None:
     """
 
     print("Initializing...")
+    max_seconds -= 1  # Assume overhead of 1 second or so
     # Config
     config = dict(kwargs)
     config_f = Path.home() / ".ssh/config"
@@ -99,7 +131,7 @@ def speedtest_ssh(host: str, max_seconds: int, **kwargs: str) -> None:
     print("Configuring...")
     # Create remote temp directory
     cmd: str = 'from tempfile import mkdtemp; print(mkdtemp(prefix="/tmp/speedtest_ssh."))'
-    stdin, stdout, stderr = client.exec_command(f"python3 -c {shlex.quote(cmd)}", timeout=30)
+    stdin, stdout, stderr = client.exec_command(f"python3 -c {shlex.quote(cmd)}", timeout=_ssh_timeout)
     stdin.close()
     err = stderr.read()
     stderr.close()
@@ -116,7 +148,7 @@ def speedtest_ssh(host: str, max_seconds: int, **kwargs: str) -> None:
     size = _base_size
     try:
         print("Testing speed...")
-        while nano_sec < (max_seconds*1E9)//4:
+        while nano_sec < (max_seconds*1E9)//2:
             up_t, down_t = _iteration(local_d, remote_d, ftp, size)
             nano_sec = up_t + down_t
             size *= 2
@@ -125,7 +157,12 @@ def speedtest_ssh(host: str, max_seconds: int, **kwargs: str) -> None:
     finally:
         print("Cleaning up...")
         local_d.rmdir()
-        stdin, stdout, stderr = client.exec_command(f"rm -rf {shlex.quote(str(remote_d))}", timeout=30)
+        cmd = f"rm -rf {shlex.quote(str(remote_d))}"
+        try:
+            stdin, stdout, stderr = client.exec_command(cmd, timeout=_ssh_timeout)
+        except:
+            print(f"Failed to clean up, please run on remote host {host} the command: {cmd}")
+            raise
 
     up, down = get_stats(up_t, down_t, size)
     print("\n" + f"Upload Speed: {up}" + "\n" + f"Download Speed: {down}")
@@ -142,7 +179,7 @@ def main(argv: list[str]) -> None:
     parser.add_argument("-u", "--username", default=None, help="The username to use to ssh")
     parser.add_argument("--password", default=None, help="The password to use to ssh")
     parser.add_argument("--port", type=int, default=None, help="The port to use to ssh")
-    parser.add_argument("--max_seconds", type=int, default=30, help="A soft limit for how many seconds to spend uploading / downloading")
+    parser.add_argument("--max_seconds", type=int, default=25, help="A very soft limit for how many seconds to spend uploading / downloading")
     return speedtest_ssh(**vars(parser.parse_args(argv[1:])))
 
 

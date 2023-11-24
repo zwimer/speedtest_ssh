@@ -14,7 +14,8 @@ urls = {Homepage = "https://github.com/zwimer/speedtest_ssh"}
 requires-python = ">= 3.8"
 dynamic = ["version"]
 dependencies = [
-    "paramiko"
+    "paramiko",
+    "tqdm",
 ]
 
 [project.readme]

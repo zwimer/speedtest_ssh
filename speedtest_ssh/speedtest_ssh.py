@@ -40,7 +40,7 @@ class ProgressBar(tqdm):
         :param bytes_remaining: The number of bytes yet to be transferred
         """
         if self.total is None:
-            self.total = bytes_done + bytes_remaining
+            self.total = bytes_remaining
         self.update(bytes_done - self.n)
 
 

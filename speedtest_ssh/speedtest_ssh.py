@@ -92,26 +92,28 @@ def _iteration(local_d: Path, remote_d: Path, ftp: paramiko.SFTPClient, size: in
     return up, down
 
 
-def _load_config(host: str, default: dict[str, str]) -> dict:
+def _load_config(host: str, default: dict[str, int | str | None]) -> dict:
     """
     :param default: A starting dict to build off of
     :return: A dict containing info needed for paramiko to ssh
     """
-    config: dict[str, str] = dict(default)
+    config = dict(default)
     config_f = Path.home() / ".ssh/config"
     if config_f.exists():
         ssh_config = paramiko.config.SSHConfig.from_path(config_f)
         global_config: paramiko.config.SSHConfigDict = ssh_config.lookup("*")
         host_config: paramiko.config.SSHConfigDict = ssh_config.lookup(host)
-        def load(cname: str, name: str, default = None) -> None:
+        def load(cname: str, name: str) -> None:
             if config.get(cname, None) is None:
                 value = host_config.get(name, None)
-                value = global_config.get(name, default) if value is None else value
+                value = global_config.get(name, None) if value is None else value
                 if value is not None:
                     config[cname] = value
-        load("port", "port", 22)
+        load("port", "port")
         load("username", "user")
         load("key_filename", "identityfile")
+    if config.get("port", None) is None:
+        config["port"] = 22
     return config
 
 
@@ -158,7 +160,7 @@ def _rm_rf_remote(client: paramiko.SSHClient, d: Path) -> None:
         raise RuntimeError(f"Failed to clean up, please remove {d} from the host manually") from e
 
 
-def speedtest_ssh(host: str, num_seconds: int, **kwargs: str) -> None:
+def speedtest_ssh(host: str, num_seconds: int, **kwargs: int | str | None) -> None:
     """
     speedtest_ssh, client shoule be False unless called by this program
     """

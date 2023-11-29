@@ -1,3 +1,3 @@
-__version__ = "1.3.0"
+from ._version import __version__
 
 from .speedtest_ssh import cli

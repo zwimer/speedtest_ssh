@@ -36,4 +36,12 @@ find = {namespaces = false}
 speedtest_ssh = ["py.typed"]
 
 [tool.setuptools.dynamic]
-version = {attr = "speedtest_ssh.__version__"}
+version = {attr = "speedtest_ssh._version.__version__"}
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = [
+	"unnecessary-lambda-assignment",
+	"missing-module-docstring",
+	"invalid-name",
+	"line-too-long",
+]

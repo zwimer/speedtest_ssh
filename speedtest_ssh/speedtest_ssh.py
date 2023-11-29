@@ -3,8 +3,6 @@ from tempfile import mkdtemp
 from pathlib import Path
 from math import log
 import argparse
-import shutil
-import socket
 import shlex
 import time
 import sys
@@ -13,7 +11,7 @@ import os
 from tqdm import tqdm
 import paramiko
 
-from . import __version__
+from ._version import __version__
 
 
 _base_size = 2 * (1024**2)
@@ -63,22 +61,22 @@ def _ur_file(size: int, d: Path) -> Path:
     return ret
 
 
-def _get_stats(up_ns: int, down_ns: int, size: int) -> tuple[str, str]:
+def _print_results(up_ns: int, down_ns: int, size: int) -> None:
     """
-    :return: Up speed, down speed in Mbit/s
+    Print the speed test results
     """
-    speed = lambda s: 8 * (size/1024**2) / (s/1000**3)
-    return f"{speed(up_ns):.2f} Mbit/s", f"{speed(down_ns):.2f} Mbit/s"
+    fmt = lambda s: f"{8 * (size/1024**2) / (s/1000**3):.2f} Mbit/s"
+    print("\n" + f"Upload Speed: {fmt(up_ns)}" + "\n" + f"Download Speed: {fmt(down_ns)}")
 
 
-def _iteration(local_d: Path, remote_d: str, ftp: paramiko.SFTPClient, size: int) -> tuple[int, int]:
+def _iteration(local_d: Path, remote_d: Path, ftp: paramiko.SFTPClient, size: int) -> tuple[int, int]:
     """
     Time uploading and downloading a file of size bytes
     :return: <nanoseconds to upload>, <nanoseconds to download>
     """
     local = str(local_d / "down")
     remote = str(remote_d / "down")
-    test_f = _ur_file(size, local_d)
+    test_f: Path = _ur_file(size, local_d)
     try:
         start: int = time.time_ns()
         with ProgressBar("Upload") as p:
@@ -94,61 +92,95 @@ def _iteration(local_d: Path, remote_d: str, ftp: paramiko.SFTPClient, size: int
     return up, down
 
 
+def _load_config(host: str, default: dict[str, str]) -> dict:
+    """
+    :param default: A starting dict to build off of
+    :return: A dict containing info needed for paramiko to ssh
+    """
+    config: dict[str, str] = dict(default)
+    config_f = Path.home() / ".ssh/config"
+    if config_f.exists():
+        ssh_config = paramiko.config.SSHConfig.from_path(config_f)
+        global_config: paramiko.config.SSHConfigDict = ssh_config.lookup("*")
+        host_config: paramiko.config.SSHConfigDict = ssh_config.lookup(host)
+        def load(cname: str, name: str, default = None) -> None:
+            if config.get(cname, None) is None:
+                value = host_config.get(name, None)
+                value = global_config.get(name, default) if value is None else value
+                if value is not None:
+                    config[cname] = value
+        load("port", "port", 22)
+        load("username", "user")
+        load("key_filename", "identityfile")
+    return config
+
+
+def _load_keys(client: paramiko.SSHClient, host: str, port: int) -> None:
+    """
+    Load available ssh keys into the ssh client
+    """
+    hosts_f = Path.home() / ".ssh/known_hosts"
+    if hosts_f.exists():
+        client.load_host_keys(hosts_f)
+    keys: paramiko.HostKeys = client.get_host_keys()
+    try:
+        keys[f"[{host.lower()}]:{port}"] = keys[host.lower()]
+    except KeyError:
+        pass
+
+
+def _mkdtemp_remote(client: paramiko.SSHClient) -> Path:
+    """
+    :return: A path to a temp directory on the remote client
+    """
+    cmd: str = shlex.quote('from tempfile import mkdtemp; print(mkdtemp(prefix="/tmp/speedtest_ssh."))')
+    stdin, stdout, stderr = client.exec_command(f"python3 -c {cmd}", timeout=_ssh_timeout)
+    stdin.close()
+    err: bytes = stderr.read()
+    stderr.close()
+    assert not err, f"Bootstrapping finished with: {err!r}"
+    out: bytes = stdout.read()
+    assert out, "Temp directory name is empty."
+    stdout.close()
+    return Path(out.strip().decode())
+
+
+def _rm_rf_remote(client: paramiko.SSHClient, d: Path) -> None:
+    """
+    Remotely run: rm -rf on d
+    """
+    try:
+        stdin, stdout, stderr = client.exec_command("rm -rf {shlex.quote(cmd)}", timeout=_ssh_timeout)
+        stdin.close()
+        stdout.close()
+        stderr.close()
+    except Exception as e:
+        raise RuntimeError(f"Failed to clean up, please remove {d} from the host manually") from e
+
+
 def speedtest_ssh(host: str, num_seconds: int, **kwargs: str) -> None:
     """
     speedtest_ssh, client shoule be False unless called by this program
     """
-
     print("Initializing...")
-    # Config
-    config = dict(kwargs)
-    config_f = Path.home() / ".ssh/config"
-    if config_f.exists():
-        ssh_config = paramiko.config.SSHConfig.from_path(config_f)
-        global_config = ssh_config.lookup("*")
-        host_config = ssh_config.lookup(host)
-        if config.get("port") is None:
-            config["port"] = host_config.get("port", 22)
-        if config.get("username") is None:
-            config["username"] = host_config["user"]
-        key = host_config.get("identityfile", None)
-        if key is not None:
-            config["key_filename"] = key
-    # Host keys
-    hosts_f = Path.home() / ".ssh/known_hosts"
+    config = _load_config(host, kwargs)
     client = paramiko.SSHClient()
-    if hosts_f.exists():
-        client.load_host_keys(hosts_f)
-    keys = client.get_host_keys()
-    try:
-        keys[f"[{host.lower()}]:{config['port']}"] = keys[host.lower()]
-    except:
-        pass
+    _load_keys(client, host, config["port"])
 
     print("Connecting...")
     client.connect(host.lower(), **config)
 
     print("Configuring...")
-    # Create remote temp directory
-    cmd: str = 'from tempfile import mkdtemp; print(mkdtemp(prefix="/tmp/speedtest_ssh."))'
-    stdin, stdout, stderr = client.exec_command(f"python3 -c {shlex.quote(cmd)}", timeout=_ssh_timeout)
-    stdin.close()
-    err = stderr.read()
-    stderr.close()
-    assert not err, f"Bootstrapping finished with: {err}"
-    out = stdout.read()
-    assert out, "Temp directory name is empty."
-    stdout.close()
-    remote_d: str = Path(out.strip().decode())
-    ftp = client.open_sftp()
+    ftp: paramiko.SFTPClient = client.open_sftp()
     local_d = Path(mkdtemp(prefix="/tmp/speedtest_ssh."))
+    remote_d: Path = _mkdtemp_remote(client)
 
     # Iterations
-    nano_sec = 0
-    size = _base_size
+    nano_sec: int = 0
+    size: int = _base_size
     try:
-        remaining: int = 1E9*num_seconds
-        while (1.5*nano_sec) < remaining:
+        remaining: int = int(1E9)*num_seconds
+        while int(1.5*nano_sec) < remaining-1:
             size *= 2**(0 if not nano_sec else max(1, int(log(remaining / nano_sec, 2))))  # Faster than just *=2
             up_t, down_t = _iteration(local_d, remote_d, ftp, size)
             nano_sec = up_t + down_t
@@ -157,15 +189,13 @@ def speedtest_ssh(host: str, num_seconds: int, **kwargs: str) -> None:
     finally:
         print("Cleaning up...")
         local_d.rmdir()
-        cmd = f"rm -rf {shlex.quote(str(remote_d))}"
         try:
-            stdin, stdout, stderr = client.exec_command(cmd, timeout=_ssh_timeout)
-        except:
-            print(f"Failed to clean up, please run on remote host {host} the command: {cmd}")
-            raise
+            _rm_rf_remote(client, remote_d)
+        except RuntimeError as e:
+            print(f"Error: {e}")  # Not really much we can do but warn about it
 
-    up, down = _get_stats(up_t, down_t, size)
-    print("\n" + f"Upload Speed: {up}" + "\n" + f"Download Speed: {down}")
+    # Print results
+    _print_results(up_t, down_t, size)
 
 
 def main(argv: list[str]) -> None:
@@ -179,7 +209,7 @@ def main(argv: list[str]) -> None:
     parser.add_argument("-u", "--username", default=None, help="The username to use to ssh")
     parser.add_argument("--password", default=None, help="The password to use to ssh")
     parser.add_argument("--port", type=int, default=None, help="The port to use to ssh")
-    parser.add_argument("--num_seconds", type=int, default=25, help="An approximate amount of time this test should take")
+    parser.add_argument("--num_seconds", type=int, default=20, help="An approximate amount of time this test should take")
     return speedtest_ssh(**vars(parser.parse_args(argv[1:])))
 
 

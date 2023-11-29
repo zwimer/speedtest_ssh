@@ -1,6 +1,7 @@
 from __future__ import annotations
 from tempfile import mkdtemp
 from pathlib import Path
+from math import log
 import argparse
 import shutil
 import socket
@@ -15,7 +16,7 @@ import paramiko
 from . import __version__
 
 
-_base_size = 4 * (1024**2)
+_base_size = 2 * (1024**2)
 _ssh_timeout = 10
 
 
@@ -62,7 +63,7 @@ def _ur_file(size: int, d: Path) -> Path:
     return ret
 
 
-def get_stats(up_ns: int, down_ns: int, size: int) -> tuple[str, str]:
+def _get_stats(up_ns: int, down_ns: int, size: int) -> tuple[str, str]:
     """
     :return: Up speed, down speed in Mbit/s
     """
@@ -93,13 +94,12 @@ def _iteration(local_d: Path, remote_d: str, ftp: paramiko.SFTPClient, size: int
     return up, down
 
 
-def speedtest_ssh(host: str, max_seconds: int, **kwargs: str) -> None:
+def speedtest_ssh(host: str, num_seconds: int, **kwargs: str) -> None:
     """
     speedtest_ssh, client shoule be False unless called by this program
     """
 
     print("Initializing...")
-    max_seconds -= 1  # Assume overhead of 1 second or so
     # Config
     config = dict(kwargs)
     config_f = Path.home() / ".ssh/config"
@@ -147,12 +147,12 @@ def speedtest_ssh(host: str, max_seconds: int, **kwargs: str) -> None:
     nano_sec = 0
     size = _base_size
     try:
-        print("Testing speed...")
-        while nano_sec < (max_seconds*1E9)//2:
+        remaining: int = 1E9*num_seconds
+        while (1.5*nano_sec) < remaining:
+            size *= 2**(0 if not nano_sec else max(1, int(log(remaining / nano_sec, 2))))  # Faster than just *=2
             up_t, down_t = _iteration(local_d, remote_d, ftp, size)
             nano_sec = up_t + down_t
-            size *= 2
-        size /= 2
+            remaining -= nano_sec
         ftp.close()
     finally:
         print("Cleaning up...")
@@ -164,7 +164,7 @@ def speedtest_ssh(host: str, max_seconds: int, **kwargs: str) -> None:
             print(f"Failed to clean up, please run on remote host {host} the command: {cmd}")
             raise
 
-    up, down = get_stats(up_t, down_t, size)
+    up, down = _get_stats(up_t, down_t, size)
     print("\n" + f"Upload Speed: {up}" + "\n" + f"Download Speed: {down}")
 
 
@@ -179,7 +179,7 @@ def main(argv: list[str]) -> None:
     parser.add_argument("-u", "--username", default=None, help="The username to use to ssh")
     parser.add_argument("--password", default=None, help="The password to use to ssh")
     parser.add_argument("--port", type=int, default=None, help="The port to use to ssh")
-    parser.add_argument("--max_seconds", type=int, default=25, help="A very soft limit for how many seconds to spend uploading / downloading")
+    parser.add_argument("--num_seconds", type=int, default=25, help="An approximate amount of time this test should take")
     return speedtest_ssh(**vars(parser.parse_args(argv[1:])))
 
 

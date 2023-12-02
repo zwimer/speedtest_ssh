@@ -1,12 +1,25 @@
+from dataclasses import dataclass
 from pathlib import Path
 import subprocess
 import shutil
+import os
 
 from tqdm import tqdm
 import paramiko
 
 
 __all__ = ("DataTransfer", "SFTP", "Rsync")
+
+
+@dataclass
+class Config:
+    """
+    Used by a DataTransfer class to access a client
+    """
+    host: str
+    user: str | None
+    password: str | None
+    port: int | None
 
 
 class _ProgressBar(tqdm):
@@ -78,40 +91,55 @@ class Rsync(DataTransfer):
     Requires rsync be installed
     """
 
-    def __init__(self, host: str):
+    def __init__(self, config: Config):
         """
         :param host: The hostname ssh uses for the remote client
         """
-        self._host: str = host
-        rsync: str | None = shutil.which("rsync")
-        if rsync is None:
+        where: str | None = shutil.which("rsync")
+        if where is None:
             raise RuntimeError("Cannot find rsync executable")
-        self._rsync = Path(rsync).resolve()
-        if not self._rsync.exists():
+        rsync: Path = Path(where).resolve()
+        if not rsync.exists():
             raise RuntimeError("Cannot find valid rsync executable")
         # Determine rsync version
         try:
-            output: str = subprocess.check_output((self._rsync, "--version")).decode()
+            output: str = subprocess.check_output((rsync, "--version")).decode()
             output = output.split("version")[1].split("protocol")[0].strip()
             version: tuple[int,...] = tuple(int(i) for i in output.split("."))
             self._old = version <= (3, 1, 0)  # macOS has an old version by default
             if self._old:
                 print("\tOld version of rsync detected. Output will be more verbose.")
         except (subprocess.CalledProcessError, KeyError) as e:
-            raise RuntimeError(f"Could not determine rsync version from {self._rsync}") from e
+            raise RuntimeError(f"Could not determine rsync version from {rsync}") from e
+        # Determine rsync command
+        self._cmd = [rsync]
+        self._env = os.environ.copy()
+        if config.password is not None:
+            where = shutil.which("sshpass")
+            if where is None:
+                raise RuntimeError("Cannot pass password to rsync without sshpass installed")
+            sshpass: Path = Path(where).resolve()
+            if not sshpass.exists():
+                raise RuntimeError("Cannot pass password to rsync without valid sshpass installed")
+            self._cmd = [sshpass, "-e"] + self._cmd
+            self._env["SSHPASS"] = config.password
+        self._cmd.extend(("-hh", "--progress" if self._old else "--info=progress2"))
+        if config.port is not None:
+            self._cmd.append(f"--port={config.port}")
+        # Determine host info
+        self._who: str = config.host if config.user is None else f"{config.user}@{config.host}"
 
     def _transfer(self, src: str | Path, dst: str | Path) -> None:
         """
         rsync src to dst
         """
         try:
-            prog: str = "--progress" if self._old else "--info=progress2"
-            _ = subprocess.run((self._rsync, prog, "-hh", src, dst), check=True)
+            _ = subprocess.run((*self._cmd, src, dst), env=self._env, check=True)
         except subprocess.CalledProcessError as e:
             raise RuntimeError("Failed to transfer data during speed test") from e
 
     def put(self, local: Path, remote: Path) -> None:
-        self._transfer(local, f"{self._host}:remote")
+        self._transfer(local, f"{self._who}:{remote}")
 
     def get(self, remote: Path, local: Path) -> None:
-        self._transfer(f"{self._host}:remote", local)
+        self._transfer(f"{self._who}:{remote}", local)

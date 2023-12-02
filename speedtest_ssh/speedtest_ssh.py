@@ -10,7 +10,7 @@ import os
 
 import paramiko
 
-from .data_transfer import DataTransfer, SFTP, Rsync
+from .data_transfer import Config, DataTransfer, SFTP, Rsync
 from ._version import __version__
 
 
@@ -24,6 +24,9 @@ def _load_config(host: str, default: dict[str, int | str | None]) -> dict:
     :return: A dict containing info needed for paramiko to ssh
     """
     config = dict(default)
+    if "user" in config:
+        config["username"] = config["user"]
+        del config["user"]
     config_f = Path.home() / ".ssh/config"
     if config_f.exists():
         ssh_config = paramiko.config.SSHConfig.from_path(config_f)
@@ -149,7 +152,8 @@ def speedtest_ssh(host: str, num_seconds: int, mode: str, **kwargs: int | str | 
 
     print("Configuring...")
     sftp: paramiko.SFTPClient = client.open_sftp()
-    dt: DataTransfer = Rsync(host) if mode == "rsync" else SFTP(sftp)
+    rconfig = Config(host=host, **kwargs) if mode == "rsync" else None
+    dt: DataTransfer = Rsync(rconfig) if mode == "rsync" else SFTP(sftp)
     local_d = Path(mkdtemp(prefix="/tmp/speedtest_ssh."))
     remote_d: Path = _mkdtemp_remote(client)
 
@@ -170,6 +174,7 @@ def speedtest_ssh(host: str, num_seconds: int, mode: str, **kwargs: int | str | 
         local_d.rmdir()
         try:
             _rm_rf_remote(client, remote_d)
+            pass
         except RuntimeError as e:
             print(f"Error: {e}")  # Not really much we can do but warn about it
 
@@ -185,8 +190,8 @@ def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(prog=base)
     parser.add_argument("--version", action="version", version=f"{base} {__version__}")
     parser.add_argument("host", help="The host to speedtest the conection to")
-    parser.add_argument("-u", "--username", default=None, help="The username to use to ssh")
-    parser.add_argument("--password", default=None, help="The password to use to ssh")
+    parser.add_argument("-u", "--user", default=None, help="The user to use with ssh")
+    parser.add_argument("--password", default=None, help="The password to use with ssh") # TODO: make take from env var
     parser.add_argument("--port", type=int, default=None, help="The port to use to ssh")
     parser.add_argument("--num_seconds", type=int, default=20, help="An approximate amount of time this test should take")
     parser.add_argument("-m", "--mode", choices=["rsync", "sftp"], default="rsync", help="The speedtest method. Defaults to rsync")

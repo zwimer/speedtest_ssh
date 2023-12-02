@@ -71,7 +71,7 @@ def speedtest_ssh(host: str, num_seconds: int, mode: str, **kwargs: int | str | 
             nano_sec: int = 0
             size: int = base_size
             remaining: int = int(1E9)*num_seconds
-            while int(1.5*nano_sec) < remaining-1:
+            while int(1.5*nano_sec) < remaining-1: # Try to get close to seconds
                 size *= 2**(0 if not nano_sec else max(1, int(log(remaining / nano_sec, 2))))
                 # ^ Faster than just *=2
                 up_t, down_t = _iteration(temp, remote, size)
@@ -93,7 +93,7 @@ def main(argv: list[str]) -> None:
         help=f"Read password from {_password_env_name} environment variable")
     parser.add_argument("--port", type=int, default=None, help="The port used for ssh")
     parser.add_argument("--num-seconds", type=int, default=20,
-        help="An approximate amount of time this test should take")
+        help="An approximate number of seconds of time this test should take")
     parser.add_argument("-m", "--mode", choices=["rsync", "sftp"], default="rsync",
         help="The speedtest method. Defaults to rsync")
     return speedtest_ssh(**vars(parser.parse_args(argv[1:])))

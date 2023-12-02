@@ -44,7 +44,7 @@ def create_paramiko_config(raw: Config) -> dict:
     return config
 
 
-def load_keys(client: SSHClient, config: Config) -> None:
+def load_keys(client: SSHClient, host: str, port: int) -> None:
     """
     Load available ssh keys into the ssh client
     """
@@ -52,21 +52,20 @@ def load_keys(client: SSHClient, config: Config) -> None:
     if hosts_f.exists():
         client.load_host_keys(hosts_f)
     keys: HostKeys = client.get_host_keys()
-    # Paramiko seems overly strict about ssh keys in a way ssh is not sometimes
-    if config.host in keys:
-        keys[f"[{config.host}]:{config.port}"] = keys[config.host]
-    low: str = config.host.lower()
-    if low in keys:
-        keys[f"[{low}]:{config.port}"] = keys[low]
+    # Paramiko seems overly strict about ssh keys in a way ssh is not
+    for i in (host, host.lower()):
+        if i in keys:
+            keys[f"[{i}]:{port}"] = keys[i]
 
 
 @contextmanager
-def sftp_wrapper(config: Config) -> Generator["SFTPClient", None, None]:
+def sftp_wrapper(raw: Config) -> Generator["SFTPClient", None, None]:
     """
     A context manager which yields a conncted SFTPClient
     """
     with SSHClient() as client:
-        load_keys(client, config)
-        client.connect(**create_paramiko_config(config))
+        config: dict[str, str | int | None] = create_paramiko_config(raw)
+        load_keys(client, raw.host, config["port"])
+        client.connect(**config)
         with client.open_sftp() as sftp:
             yield sftp

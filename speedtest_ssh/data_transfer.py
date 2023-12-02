@@ -55,7 +55,7 @@ class DataTransfer:
         alphabet: str = string.ascii_uppercase + string.ascii_lowercase + string.digits
         self._remote_f: str = "/tmp/speedtest_ssh." + "".join(random.choice(alphabet) for _ in range(8))
         self._sftp_cm = sftp_wrapper(config)
-        self._sftp: SFTPClient | None = None  # Defined in __enter__
+        self._sftp: SFTPClient  # Defined in __enter__
 
     def __enter__(self) -> "DataTransfer":
         self._sftp = self._sftp_cm.__enter__()

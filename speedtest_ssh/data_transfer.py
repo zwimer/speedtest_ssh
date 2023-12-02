@@ -29,7 +29,6 @@ class ProgressBar(tqdm):
             unit=" B",
             unit_scale=True,
             unit_divisor=1024,
-            leave=False,
             dynamic_ncols=True
         )
 
@@ -93,11 +92,11 @@ class SFTP(DataTransfer):
     """
 
     def put(self, local: Path) -> None:
-        with ProgressBar("Upload") as p:
+        with ProgressBar("Upload   ") as p:
             self._sftp.put(str(local), self._remote_f, callback=p)
 
     def get(self, local: Path) -> None:
-        with ProgressBar("Upload") as p:
+        with ProgressBar("Download ") as p:
             self._sftp.get(self._remote_f, str(local), callback=p)
 
 

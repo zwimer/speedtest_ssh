@@ -42,6 +42,7 @@ version = {attr = "speedtest_ssh._version.__version__"}
 disable = [
 	"unnecessary-lambda-assignment",
 	"missing-module-docstring",
-	"invalid-name",
+	"too-many-locals",
 	"line-too-long",
+	"invalid-name",
 ]

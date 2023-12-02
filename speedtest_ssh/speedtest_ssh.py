@@ -8,88 +8,14 @@ import time
 import sys
 import os
 
-from tqdm import tqdm
 import paramiko
 
+from .data_transfer import DataTransfer, SFTP, Rsync
 from ._version import __version__
 
 
 _base_size = 2 * (1024**2)
 _ssh_timeout = 10
-
-
-class ProgressBar(tqdm):
-    """
-    A small tqdm wrapper for paramiko's SFTP callbacks to use
-    """
-
-    def __init__(self, desc: str):
-        super().__init__(
-            desc=desc,
-            unit=" B",
-            unit_scale=True,
-            unit_divisor=1024,
-            leave=False,
-            dynamic_ncols=True
-        )
-
-    def __call__(self, bytes_done: int, bytes_remaining: int):
-        """
-        :param bytes_done: The number of bytes transferred
-        :param bytes_remaining: The number of bytes yet to be transferred
-        """
-        if self.total is None:
-            self.total = bytes_remaining
-        self.update(bytes_done - self.n)
-
-
-def _ur_file(size: int, d: Path) -> Path:
-    """
-    Create a file in directory d of that is size bytes large
-    :return: The path to the newly created file
-    """
-    # sendfile not always supported so we do this the hard way
-    done = 0
-    block = _base_size
-    ret = d / str(size)
-    with ret.open("wb") as f:
-        with open("/dev/urandom", "rb") as ur:
-            with ret.open("wb") as f:
-                while done < size:
-                    f.write(ur.read(block))
-                    done += block
-    return ret
-
-
-def _print_results(up_ns: int, down_ns: int, size: int) -> None:
-    """
-    Print the speed test results
-    """
-    fmt = lambda s: f"{8 * (size/1024**2) / (s/1000**3):.2f} Mbit/s"
-    print("\n" + f"Upload Speed: {fmt(up_ns)}" + "\n" + f"Download Speed: {fmt(down_ns)}")
-
-
-def _iteration(local_d: Path, remote_d: Path, ftp: paramiko.SFTPClient, size: int) -> tuple[int, int]:
-    """
-    Time uploading and downloading a file of size bytes
-    :return: <nanoseconds to upload>, <nanoseconds to download>
-    """
-    local = str(local_d / "down")
-    remote = str(remote_d / "down")
-    test_f: Path = _ur_file(size, local_d)
-    try:
-        start: int = time.time_ns()
-        with ProgressBar("Upload") as p:
-            ftp.put(str(test_f), remote, callback=p)
-        up: int = time.time_ns() - start
-        with ProgressBar("Download") as p:
-            ftp.get(remote, local, callback=p)
-        down: int = time.time_ns() - start - up
-    finally:
-        test_f.unlink()
-        if Path(local).exists():
-            Path(local).unlink()
-    return up, down
 
 
 def _load_config(host: str, default: dict[str, int | str | None]) -> dict:
@@ -140,11 +66,60 @@ def _mkdtemp_remote(client: paramiko.SSHClient) -> Path:
     stdin.close()
     err: bytes = stderr.read()
     stderr.close()
-    assert not err, f"Bootstrapping finished with: {err!r}"
+    if err:
+        raise RuntimeError(f"Bootstrapping finished with: {err!r}")
     out: bytes = stdout.read()
-    assert out, "Temp directory name is empty."
+    if not out:
+        raise RuntimeError("Temp directory name is empty.")
     stdout.close()
     return Path(out.strip().decode())
+
+
+def _ur_file(size: int, d: Path) -> Path:
+    """
+    Create a file in directory d of that is size bytes large
+    :return: The path to the newly created file
+    """
+    # sendfile not always supported so we do this the hard way
+    done = 0
+    block = _base_size
+    ret = d / str(size)
+    with ret.open("wb") as f:
+        with open("/dev/urandom", "rb") as ur:
+            with ret.open("wb") as f:
+                while done < size:
+                    f.write(ur.read(block))
+                    done += block
+    return ret
+
+
+def _iteration(local_d: Path, remote_d: Path, dt: DataTransfer, size: int) -> tuple[int, int]:
+    """
+    Time uploading and downloading a file of size bytes
+    :return: <nanoseconds to upload>, <nanoseconds to download>
+    """
+    local: Path = local_d / "down"
+    remote: Path = remote_d / "down"
+    test_f: Path = _ur_file(size, local_d)
+    try:
+        start: int = time.time_ns()
+        dt.put(test_f, remote)
+        up: int = time.time_ns() - start
+        dt.get(remote, local)
+        down: int = time.time_ns() - start - up
+    finally:
+        test_f.unlink()
+        if Path(local).exists():
+            Path(local).unlink()
+    return up, down
+
+
+def _print_results(up_ns: int, down_ns: int, size: int) -> None:
+    """
+    Print the speed test results
+    """
+    fmt = lambda s: f"{8 * (size/1024**2) / (s/1000**3):.2f} Mbit/s"
+    print("\n" + f"Upload Speed: {fmt(up_ns)}" + "\n" + f"Download Speed: {fmt(down_ns)}")
 
 
 def _rm_rf_remote(client: paramiko.SSHClient, d: Path) -> None:
@@ -160,7 +135,7 @@ def _rm_rf_remote(client: paramiko.SSHClient, d: Path) -> None:
         raise RuntimeError(f"Failed to clean up, please remove {d} from the host manually") from e
 
 
-def speedtest_ssh(host: str, num_seconds: int, **kwargs: int | str | None) -> None:
+def speedtest_ssh(host: str, num_seconds: int, mode: str, **kwargs: int | str | None) -> None:
     """
     speedtest_ssh, client shoule be False unless called by this program
     """
@@ -173,21 +148,23 @@ def speedtest_ssh(host: str, num_seconds: int, **kwargs: int | str | None) -> No
     client.connect(host.lower(), **config)
 
     print("Configuring...")
-    ftp: paramiko.SFTPClient = client.open_sftp()
+    sftp: paramiko.SFTPClient = client.open_sftp()
+    dt: DataTransfer = Rsync(host) if mode == "rsync" else SFTP(sftp)
     local_d = Path(mkdtemp(prefix="/tmp/speedtest_ssh."))
     remote_d: Path = _mkdtemp_remote(client)
 
     # Iterations
+    print("Testing...")
     nano_sec: int = 0
     size: int = _base_size
     try:
         remaining: int = int(1E9)*num_seconds
         while int(1.5*nano_sec) < remaining-1:
             size *= 2**(0 if not nano_sec else max(1, int(log(remaining / nano_sec, 2))))  # Faster than just *=2
-            up_t, down_t = _iteration(local_d, remote_d, ftp, size)
+            up_t, down_t = _iteration(local_d, remote_d, dt, size)
             nano_sec = up_t + down_t
             remaining -= nano_sec
-        ftp.close()
+        sftp.close()
     finally:
         print("Cleaning up...")
         local_d.rmdir()
@@ -212,6 +189,7 @@ def main(argv: list[str]) -> None:
     parser.add_argument("--password", default=None, help="The password to use to ssh")
     parser.add_argument("--port", type=int, default=None, help="The port to use to ssh")
     parser.add_argument("--num_seconds", type=int, default=20, help="An approximate amount of time this test should take")
+    parser.add_argument("-m", "--mode", choices=["rsync", "sftp"], default="rsync", help="The speedtest method. Defaults to rsync")
     return speedtest_ssh(**vars(parser.parse_args(argv[1:])))
 
 

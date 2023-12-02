@@ -12,6 +12,7 @@ from ._version import __version__
 
 
 base_size = 2 * (1024**2)
+_password_env_name = "SPEEDTEST_SSH_PASSWORD"
 
 
 def _iteration(temp: Path, client: DataTransfer, size: int) -> tuple[int, int]:
@@ -56,6 +57,11 @@ def speedtest_ssh(host: str, num_seconds: int, mode: str, **kwargs: int | str | 
     """
     Run speedtest_ssh
     """
+    kwargs["password"] = None
+    if kwargs.pop("password_env"):
+        kwargs["password"] = os.environ.get(_password_env_name, None)
+        if kwargs["password"] is None:
+            raise RuntimeError(f"{_password_env_name} is not set")
     print("Initializing...")
     with (Rsync if mode == "rsync" else SFTP)(Config(host=host, **kwargs)) as remote:
         with NTF(prefix="speedtest_ssh.", dir="/tmp", delete_on_close=False) as ntf:
@@ -82,11 +88,14 @@ def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(prog=base)
     parser.add_argument("--version", action="version", version=f"{base} {__version__}")
     parser.add_argument("host", help="The host to speedtest the conection to")
-    parser.add_argument("-u", "--user", default=None, help="The user to use with ssh")
-    parser.add_argument("--password", default=None, help="The password to use with ssh") # TODO: make take from env var
-    parser.add_argument("--port", type=int, default=None, help="The port to use to ssh")
-    parser.add_argument("--num_seconds", type=int, default=20, help="An approximate amount of time this test should take")
-    parser.add_argument("-m", "--mode", choices=["rsync", "sftp"], default="rsync", help="The speedtest method. Defaults to rsync")
+    parser.add_argument("-u", "--user", default=None, help="The user used for ssh")
+    parser.add_argument("--password-env", action="store_true",
+        help=f"Read password from {_password_env_name} environment variable")
+    parser.add_argument("--port", type=int, default=None, help="The port used for ssh")
+    parser.add_argument("--num-seconds", type=int, default=20,
+        help="An approximate amount of time this test should take")
+    parser.add_argument("-m", "--mode", choices=["rsync", "sftp"], default="rsync",
+        help="The speedtest method. Defaults to rsync")
     return speedtest_ssh(**vars(parser.parse_args(argv[1:])))
 
 

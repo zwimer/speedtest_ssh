@@ -1,28 +1,24 @@
-from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from pathlib import Path
 import subprocess
+import random
 import shutil
+import string
 import os
 
 from tqdm import tqdm
-import paramiko
+
+from .sftp_wrapper import sftp_wrapper
+from .config import Config
+
+if TYPE_CHECKING:
+    from paramiko import SFTPClient
 
 
 __all__ = ("DataTransfer", "SFTP", "Rsync")
 
 
-@dataclass
-class Config:
-    """
-    Used by a DataTransfer class to access a client
-    """
-    host: str
-    user: str | None
-    password: str | None
-    port: int | None
-
-
-class _ProgressBar(tqdm):
+class ProgressBar(tqdm):
     """
     A small tqdm wrapper for paramiko's SFTP callbacks to use
     """
@@ -49,20 +45,46 @@ class _ProgressBar(tqdm):
 
 class DataTransfer:
     """
-    A class used to send and receive data to and from the remote client
+    A context mananger used to send and receive data to and from the remote client
+    This class is a context manager; on exit will remove the remote file on deletion
     """
+    def __init__(self, config: Config):
+        """
+        :param config: The Config object the DataTransfer instance should use
+        """
+        alphabet: str = string.ascii_uppercase + string.ascii_lowercase + string.digits
+        self._remote_f: str = "/tmp/speedtest_ssh." + "".join(random.choice(alphabet) for _ in range(8))
+        self._sftp_cm = sftp_wrapper(config)
+        self._sftp: SFTPClient | None = None  # Defined in __enter__
 
-    def put(self, local: Path, remote: Path) -> None:
+    def __enter__(self) -> "DataTransfer":
+        self._sftp = self._sftp_cm.__enter__()
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self.clean_remote()
+        self._sftp_cm.__exit__(*args, **kwargs)
+
+    def put(self, local: Path) -> None:
         """
         Send the local file to be saved at the remote path
         """
         raise NotImplementedError
 
-    def get(self, remote: Path, local: Path) -> None:
+    def get(self, local: Path) -> None:
         """
         Get the remote file to and save it at the local path
         """
         raise NotImplementedError
+
+    def clean_remote(self) -> None:
+        """
+        Removes the remote file
+        """
+        try:
+            self._sftp.remove(self._remote_f)
+        except FileNotFoundError:
+            pass
 
 
 class SFTP(DataTransfer):
@@ -70,19 +92,13 @@ class SFTP(DataTransfer):
     A DataTransfer classes that uses SFTP
     """
 
-    def __init__(self, sftp: paramiko.SFTPClient):
-        """
-        :param sftp: An existing sftp client to use
-        """
-        self._sftp: paramiko.SFTPClient = sftp
+    def put(self, local: Path) -> None:
+        with ProgressBar("Upload") as p:
+            self._sftp.put(str(local), self._remote_f, callback=p)
 
-    def put(self, local: Path, remote: Path) -> None:
-        with _ProgressBar("Upload") as p:
-            self._sftp.put(str(local), str(remote), callback=p)
-
-    def get(self, remote: Path, local: Path) -> None:
-        with _ProgressBar("Upload") as p:
-            self._sftp.get(str(remote), str(local), callback=p)
+    def get(self, local: Path) -> None:
+        with ProgressBar("Upload") as p:
+            self._sftp.get(self._remote_f, str(local), callback=p)
 
 
 class Rsync(DataTransfer):
@@ -95,6 +111,7 @@ class Rsync(DataTransfer):
         """
         :param host: The hostname ssh uses for the remote client
         """
+        super().__init__(config)
         where: str | None = shutil.which("rsync")
         if where is None:
             raise RuntimeError("Cannot find rsync executable")
@@ -112,7 +129,7 @@ class Rsync(DataTransfer):
         except (subprocess.CalledProcessError, KeyError) as e:
             raise RuntimeError(f"Could not determine rsync version from {rsync}") from e
         # Determine rsync command
-        self._cmd = [rsync]
+        self._cmd: list[str | Path] = [rsync]
         self._env = os.environ.copy()
         if config.password is not None:
             where = shutil.which("sshpass")
@@ -127,7 +144,7 @@ class Rsync(DataTransfer):
         if config.port is not None:
             self._cmd.append(f"--port={config.port}")
         # Determine host info
-        self._who: str = config.host if config.user is None else f"{config.user}@{config.host}"
+        self._target: str = ("" if config.user is None else f"{config.user}@") + f"{config.host}:{self._remote_f}"
 
     def _transfer(self, src: str | Path, dst: str | Path) -> None:
         """
@@ -138,8 +155,8 @@ class Rsync(DataTransfer):
         except subprocess.CalledProcessError as e:
             raise RuntimeError("Failed to transfer data during speed test") from e
 
-    def put(self, local: Path, remote: Path) -> None:
-        self._transfer(local, f"{self._who}:{remote}")
+    def put(self, local: Path) -> None:
+        self._transfer(local, self._target)
 
-    def get(self, remote: Path, local: Path) -> None:
-        self._transfer(f"{self._who}:{remote}", local)
+    def get(self, local: Path) -> None:
+        self._transfer(self._target, local)

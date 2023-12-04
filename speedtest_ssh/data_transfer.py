@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING
+from datetime import datetime
 from pathlib import Path
 import subprocess
 import random
@@ -26,7 +27,7 @@ class ProgressBar(tqdm):
     def __init__(self, desc: str):
         super().__init__(
             desc=desc,
-            unit=" B",
+            unit="B",
             unit_scale=True,
             unit_divisor=1024,
             dynamic_ncols=True
@@ -51,8 +52,9 @@ class DataTransfer:
         """
         :param config: The Config object the DataTransfer instance should use
         """
-        alphabet: str = string.ascii_uppercase + string.ascii_lowercase + string.digits
-        self._remote_f: str = "/tmp/speedtest_ssh." + "".join(random.choice(alphabet) for _ in range(8))
+        rand = lambda: random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits)
+        self._remote_f: str = f"/tmp/speedtest_ssh {datetime.now()} {''.join(rand() for _ in range(8))}.tmp"
+        self._remote_f = self._remote_f.replace(':', '-')
         self._sftp_cm = sftp_wrapper(config)
         self._sftp: SFTPClient  # Defined in __enter__
 

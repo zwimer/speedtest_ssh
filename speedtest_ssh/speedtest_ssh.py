@@ -1,4 +1,3 @@
-from __future__ import annotations
 from tempfile import NamedTemporaryFile as NTF
 from pathlib import Path
 from math import log
@@ -63,7 +62,7 @@ def speedtest_ssh(host: str, num_seconds: int, mode: str, **kwargs: int | str | 
         if kwargs["password"] is None:
             raise RuntimeError(f"{_password_env_name} is not set")
     print("Initializing...")
-    with (Rsync if mode == "rsync" else SFTP)(Config(host=host, **kwargs)) as remote:
+    with (Rsync if mode == "rsync" else SFTP)(Config(host=host, **kwargs)) as remote:  # type: ignore
         with NTF(prefix="speedtest_ssh.", dir="/tmp", delete_on_close=False) as ntf:
             ntf.close()
             temp = Path(ntf.name)

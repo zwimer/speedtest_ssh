@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import TYPE_CHECKING
 from datetime import datetime
 from pathlib import Path
@@ -38,6 +39,7 @@ class ProgressBar(tqdm):
         :param bytes_done: The number of bytes transferred
         :param bytes_remaining: The number of bytes yet to be transferred
         """
+        self.total: int | None
         if self.total is None:
             self.total = bytes_remaining
         self.update(bytes_done - self.n)
@@ -58,7 +60,7 @@ class DataTransfer:
         self._sftp_cm = sftp_wrapper(config)
         self._sftp: SFTPClient  # Defined in __enter__
 
-    def __enter__(self) -> "DataTransfer":
+    def __enter__(self) -> DataTransfer:
         self._sftp = self._sftp_cm.__enter__()
         return self
 
@@ -139,7 +141,7 @@ class Rsync(DataTransfer):
             sshpass: Path = Path(where).resolve()
             if not sshpass.exists():
                 raise RuntimeError("Cannot pass password to rsync without valid sshpass installed")
-            self._cmd = [sshpass, "-e"] + self._cmd
+            self._cmd = [sshpass, "-e"] + self._cmd  # type: ignore
             self._env["SSHPASS"] = config.password
         self._cmd.extend(("-hh", "--progress" if self._old else "--info=progress2"))
         if config.port is not None:

@@ -26,13 +26,7 @@ class ProgressBar(tqdm):
     """
 
     def __init__(self, desc: str):
-        super().__init__(
-            desc=desc,
-            unit="B",
-            unit_scale=True,
-            unit_divisor=1024,
-            dynamic_ncols=True
-        )
+        super().__init__(desc=desc, unit="B", unit_scale=True, unit_divisor=1024, dynamic_ncols=True)
 
     def __call__(self, bytes_done: int, bytes_remaining: int):
         """
@@ -50,13 +44,14 @@ class DataTransfer:
     A context mananger used to send and receive data to and from the remote client
     This class is a context manager; on exit will remove the remote file on deletion
     """
+
     def __init__(self, config: Config):
         """
         :param config: The Config object the DataTransfer instance should use
         """
         rand = lambda: random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits)
         self._remote_f: str = f"/tmp/speedtest_ssh {datetime.now()} {''.join(rand() for _ in range(8))}.tmp"
-        self._remote_f = self._remote_f.replace(':', '-')
+        self._remote_f = self._remote_f.replace(":", "-")
         self._sftp_cm = sftp_wrapper(config)
         self._sftp: SFTPClient  # Defined in __enter__
 
@@ -125,7 +120,7 @@ class Rsync(DataTransfer):
         try:
             output: str = subprocess.check_output((rsync, "--version")).decode()
             output = output.split("version")[1].split("protocol")[0].strip()
-            version: tuple[int,...] = tuple(int(i) for i in output.split("."))
+            version: tuple[int, ...] = tuple(int(i) for i in output.split("."))
             self._old = version <= (3, 1, 0)  # macOS has an old version by default
             if self._old:
                 print("\tOld version of rsync detected. Output will be more verbose.")

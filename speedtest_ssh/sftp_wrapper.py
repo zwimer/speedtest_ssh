@@ -30,12 +30,14 @@ def create_paramiko_config(raw: Config) -> dict:
         ssh_config: SSHConfig = SSHConfig.from_path(str(config_f))
         global_config: SSHConfigDict = ssh_config.lookup("*")
         host_config: SSHConfigDict = ssh_config.lookup(raw.host)
+
         def load(cname: str, name: str) -> None:
             if config.get(cname, None) is None:
                 value = host_config.get(name, None)
                 value = global_config.get(name, None) if value is None else value
                 if value is not None:
                     config[cname] = value
+
         load("port", "port")
         load("username", "user")
         load("key_filename", "identityfile")

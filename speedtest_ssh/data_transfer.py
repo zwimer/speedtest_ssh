@@ -6,6 +6,7 @@ import subprocess
 import random
 import shutil
 import string
+import re
 import os
 
 from tqdm import tqdm
@@ -50,8 +51,9 @@ class DataTransfer:
         :param config: The Config object the DataTransfer instance should use
         """
         rand = lambda: random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits)
-        self._remote_f: str = f"/tmp/speedtest_ssh {datetime.now()} {''.join(rand() for _ in range(8))}.tmp"
-        self._remote_f = self._remote_f.replace(":", "-")
+        self._remote_f: str = f"/tmp/speedtest-ssh_{datetime.now()}_{''.join(rand() for _ in range(8))}.tmp"
+        self._remote_f = self._remote_f.replace(":", "-").replace(" ", "_")
+        # We promise that _remote_f components match: ^[a-zA-Z\d_.-]+$ (old rsync args suck)
         self._sftp_cm = sftp_wrapper(config)
         self._sftp: SFTPClient  # Defined in __enter__
 
@@ -110,6 +112,7 @@ class Rsync(DataTransfer):
         :param host: The hostname ssh uses for the remote client
         """
         super().__init__(config)
+        self._remote_f = re.sub("[^a-zA-Z\\d_-]", "_", self._remote_f)  # Old rsync args suck
         where: str | None = shutil.which("rsync")
         if where is None:
             raise RuntimeError("Cannot find rsync executable")

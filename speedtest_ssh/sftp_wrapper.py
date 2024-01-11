@@ -1,6 +1,6 @@
-from typing import TYPE_CHECKING
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 from pathlib import Path
 import dataclasses
 

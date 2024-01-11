@@ -7,6 +7,7 @@ import sys
 import os
 
 from .data_transfer import Config, DataTransfer, SFTP, Rsync
+from .ping import ping as ping_test
 from ._version import __version__
 
 
@@ -44,15 +45,18 @@ def _iteration(temp: Path, client: DataTransfer, size: int) -> tuple[int, int]:
     return up, down
 
 
-def _print_results(up_ns: int, down_ns: int, size: int) -> None:
+def _print_results(ping_delay: float | None, up_ns: int, down_ns: int, size: int) -> None:
     """
     Print the speed test results
     """
+    prefix = "\n" + ("" if ping_delay is None else f"Ping: {ping_delay} ms\n")
     fmt = lambda s: f"{8 * (size/1024**2) / (s/1000**3):.2f} Mbit/s"
-    print("\n" + f"Upload Speed: {fmt(up_ns)}" + "\n" + f"Download Speed: {fmt(down_ns)}")
+    print(f"{prefix}Upload Speed: {fmt(up_ns)}\nDownload Speed: {fmt(down_ns)}")
 
 
-def speedtest_ssh(host: str, num_seconds: int, mode: str, **kwargs: int | str | None) -> None:
+def speedtest_ssh(
+    host: str, num_seconds: int, ping: bool, verbose: bool, mode: str, **kwargs: int | str | None
+) -> None:
     """
     Run speedtest_ssh
     """
@@ -61,7 +65,8 @@ def speedtest_ssh(host: str, num_seconds: int, mode: str, **kwargs: int | str | 
         kwargs["password"] = os.environ.get(_password_env_name, None)
         if kwargs["password"] is None:
             raise RuntimeError(f"{_password_env_name} is not set")
-    print("Initializing...")
+    ping_delay: float | None = ping_test(host, verbose) if ping else None
+    print("Connecting...")
     with (Rsync if mode == "rsync" else SFTP)(Config(host=host, **kwargs)) as remote:  # type: ignore
         with NTF(prefix="speedtest_ssh.", dir="/tmp", delete_on_close=False) as ntf:
             ntf.close()
@@ -76,7 +81,7 @@ def speedtest_ssh(host: str, num_seconds: int, mode: str, **kwargs: int | str | 
                 up_t, down_t = _iteration(temp, remote, size)
                 nano_sec = up_t + down_t
                 remaining -= nano_sec
-    _print_results(up_t, down_t, size)
+    _print_results(ping_delay, up_t, down_t, size)
 
 
 def main(argv: list[str]) -> None:
@@ -87,13 +92,15 @@ def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(prog=base)
     parser.add_argument("--version", action="version", version=f"{base} {__version__}")
     parser.add_argument("host", help="The host to speedtest the conection to")
-    parser.add_argument("-u", "--user", default=None, help="The user used for ssh")
+    parser.add_argument("--ping", action="store_true", help="Ping test the host as well")
+    parser.add_argument("--verbose", action="store_true", help="Be verbose")
+    parser.add_argument("-u", "--user", help="The user used for ssh")
     parser.add_argument(
         "--password-env", action="store_true", help=f"Read password from {_password_env_name} environment variable"
     )
-    parser.add_argument("--port", type=int, default=None, help="The port used for ssh")
+    parser.add_argument("-p", "--port", type=int, help="The port used for ssh")
     parser.add_argument(
-        "--num-seconds", type=int, default=20, help="An approximate number of seconds of time this test should take"
+        "--num-seconds", type=int, default=20, help="An approximate number of seconds the speed tests should take"
     )
     parser.add_argument(
         "-m", "--mode", choices=["rsync", "sftp"], default="rsync", help="The speedtest method. Defaults to rsync"

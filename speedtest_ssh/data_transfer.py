@@ -4,7 +4,6 @@ from datetime import datetime
 from pathlib import Path
 import subprocess
 import random
-import shutil
 import string
 import re
 import os
@@ -13,6 +12,7 @@ from tqdm import tqdm
 
 from .sftp_wrapper import sftp_wrapper
 from .config import Config
+from .util import find_exe
 
 if TYPE_CHECKING:
     from paramiko import SFTPClient
@@ -113,12 +113,7 @@ class Rsync(DataTransfer):
         """
         super().__init__(config)
         self._remote_f = re.sub("[^a-zA-Z\\d_-]", "_", self._remote_f)  # Old rsync args suck
-        where: str | None = shutil.which("rsync")
-        if where is None:
-            raise RuntimeError("Cannot find rsync executable")
-        rsync: Path = Path(where).resolve()
-        if not rsync.exists():
-            raise RuntimeError("Cannot find valid rsync executable")
+        rsync = find_exe("rsync")
         # Determine rsync version
         try:
             output: str = subprocess.check_output((rsync, "--version")).decode()
@@ -133,12 +128,7 @@ class Rsync(DataTransfer):
         self._cmd: list[str | Path] = [rsync]
         self._env = os.environ.copy()
         if config.password is not None:
-            where = shutil.which("sshpass")
-            if where is None:
-                raise RuntimeError("Cannot pass password to rsync without sshpass installed")
-            sshpass: Path = Path(where).resolve()
-            if not sshpass.exists():
-                raise RuntimeError("Cannot pass password to rsync without valid sshpass installed")
+            sshpass = find_exe("sshpass")
             self._cmd = [sshpass, "-e"] + self._cmd  # type: ignore
             self._env["SSHPASS"] = config.password
         self._cmd.extend(("-hh", "--progress" if self._old else "--info=progress2"))

@@ -1,19 +1,18 @@
 from __future__ import annotations
+from subprocess import CalledProcessError, PIPE
 from typing import TYPE_CHECKING
 from datetime import datetime
 from pathlib import Path
-import subprocess
 import random
 import string
-import shlex
 import re
 import os
 
 from tqdm import tqdm
 
 from .sftp_wrapper import sftp_wrapper
+from .util import find_exe, run_cmd
 from .config import Config
-from .util import find_exe
 
 if TYPE_CHECKING:
     from paramiko import SFTPClient
@@ -128,13 +127,13 @@ class Rsync(DataTransfer):
         self._rsync = find_exe("rsync")
         # Determine rsync version
         try:
-            output: str = self._run(self._rsync, "--version", stdout=subprocess.PIPE, check=True).stdout.decode()
-            output = output.split("version")[1].split("protocol")[0].strip()
+            p = run_cmd(self._rsync, "--version", verbose=self._verbose, stdout=PIPE, check=True)
+            output = p.stdout.decode().split("version")[1].split("protocol")[0].strip()
             version: tuple[int, ...] = tuple(int(i) for i in output.split("."))
             self._old = version <= (3, 1, 0)  # macOS has an old version by default
             if self._old:
                 print("\tOld version of rsync detected. Output will be more verbose.")
-        except (subprocess.CalledProcessError, KeyError) as e:
+        except (CalledProcessError, KeyError) as e:
             raise RuntimeError(f"Could not determine rsync version from {self._rsync}") from e
         # Determine rsync command
         self._flags: list[str | Path] = []
@@ -151,21 +150,14 @@ class Rsync(DataTransfer):
         # Determine host info
         self._target: str = ("" if config.user is None else f"{config.user}@") + f"{config.host}:{self._remote_f}"
 
-    def _run(self, cmd: Path, *args: str | Path, **kwargs) -> subprocess.CompletedProcess:
-        full = (cmd, *args)
-        if self._verbose:
-            msg = f"{'*'*30} Running Command: {cmd.name} {'*'*30}"
-            print(f"{msg}\n{' '.join(shlex.quote(str(i)) for i in full)}\n{'*'*len(msg)}")
-        return subprocess.run(full, **kwargs)
-
     def _transfer(self, src: str | Path, dst: str | Path) -> None:
         """
         :param src: The file to rsync to dst
         :param dst: The location to rsync src to
         """
         try:
-            _ = self._run(self._rsync, *self._flags, src, dst, env=self._env, check=True)
-        except subprocess.CalledProcessError as e:
+            _ = run_cmd(self._rsync, *self._flags, src, dst, verbose=self._verbose, env=self._env, check=True)
+        except CalledProcessError as e:
             raise RuntimeError("Failed to transfer data during speed test") from e
 
     def put(self, local: Path) -> None:

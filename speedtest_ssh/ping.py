@@ -1,11 +1,10 @@
-from typing import TYPE_CHECKING
+from subprocess import CalledProcessError, PIPE
 from sys import platform
-import subprocess
 
-from .util import find_exe
+from .util import find_exe, run_cmd
 
-if TYPE_CHECKING:
-    from pathlib import Path
+
+__all__ = ("PingFailed", "ping")
 
 
 class PingFailed(RuntimeError):
@@ -21,18 +20,16 @@ def ping(host: str, verbose: bool, n_pings: int = 10, max_wait: int = 3) -> floa
     """
     # We use subprocess b/c ping is suid and we don't want to require root
     print("Pinging...")
-    cmd: tuple[Path | str, ...] = (
-        find_exe("ping"),
-        "-i.1",
-        f"-c{n_pings}",
-        ("-W" if platform == "darwin" else "-w") + str(max_wait),
-        *([] if verbose else ["-q"]),
-        host,
-    )
+    exe = find_exe("ping")
     try:
-        output: str = subprocess.check_output(cmd).decode().strip()
-    except subprocess.CalledProcessError as e:
-        raise PingFailed("Non-zero exit code") from e
+        wait: str = ("-W" if platform == "darwin" else "-w") + str(max_wait)
+        q = [] if verbose else ["-q"]
+        p = run_cmd(exe, "-i.1", f"-c{n_pings}", wait, *q, host, verbose=verbose, stdout=PIPE)
+        if p.returncode:
+            raise PingFailed(f"{exe} exit code: {p.returncode}")
+        output: str = p.stdout.decode().strip()
+    except CalledProcessError as e:
+        raise PingFailed("Unkown error") from e
     if verbose:
         print(output)
     try:

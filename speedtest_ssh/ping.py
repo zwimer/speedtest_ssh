@@ -2,10 +2,10 @@ from typing import TYPE_CHECKING
 from sys import platform
 import subprocess
 
+from .util import find_exe
+
 if TYPE_CHECKING:
     from pathlib import Path
-
-from .util import find_exe
 
 
 class PingFailed(RuntimeError):
@@ -37,5 +37,5 @@ def ping(host: str, verbose: bool, n_pings: int = 10, max_wait: int = 3) -> floa
         print(output)
     try:
         return float(output.split("/")[-3])
-    except IndexError:
-        raise PingFailed("Bad output", output)
+    except IndexError as e:
+        raise PingFailed("Bad output", output) from e

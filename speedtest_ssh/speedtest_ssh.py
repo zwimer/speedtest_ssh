@@ -6,7 +6,8 @@ import time
 import sys
 import os
 
-from .data_transfer import Config, DataTransfer, SFTP, Rsync
+from .config import Config
+from .data_transfer import DataTransfer, SFTP, Rsync
 from .ping import ping as ping_test
 from ._version import __version__
 
@@ -15,7 +16,7 @@ base_size = 2 * (1024**2)
 _password_env_name = "SPEEDTEST_SSH_PASSWORD"
 
 
-def _iteration(temp: Path, client: DataTransfer, size: int) -> tuple[int, int]:
+def _iteration(temp: Path, client: DataTransfer, size: int, verbose: bool) -> tuple[int, int]:
     """
     Time uploading and downloading a file of size bytes
     :param temp: A temporary file we have ownership of
@@ -24,14 +25,18 @@ def _iteration(temp: Path, client: DataTransfer, size: int) -> tuple[int, int]:
     :return: <nanoseconds to upload>, <nanoseconds to download>
     """
     # Create the file to upload; sendfile not always supported so we do this the hard way
+    if verbose:
+        print(f"Filling {temp} with {size} from /dev/urandom... ", end="", flush=True)
     block: int = min(base_size, 1024**2)
     with temp.open("ab") as f:
         done: int = os.fstat(f.fileno()).st_size  # .tell() can be odd in append mode
-        with open("/dev/urandom", "rb") as ur:
+        with Path("/dev/urandom").open("rb") as ur:
             while done < size:
                 f.write(ur.read(block))
                 done += block
         f.truncate(size)
+    if verbose:
+        print("Done", flush=True)
     # Time uploading the file
     client.clean_remote()
     start: int = time.time_ns()
@@ -67,10 +72,15 @@ def speedtest_ssh(
             raise RuntimeError(f"{_password_env_name} is not set")
     ping_delay: float | None = ping_test(host, verbose) if ping else None
     print("Connecting...")
-    with (Rsync if mode == "rsync" else SFTP)(Config(host=host, **kwargs)) as remote:  # type: ignore
+    with (Rsync if mode == "rsync" else SFTP)(
+        Config(host=host, **kwargs),  # type: ignore
+        verbose=verbose,
+    ) as remote:
         with NTF(prefix="speedtest_ssh.", dir="/tmp", delete_on_close=False) as ntf:
             ntf.close()
             temp = Path(ntf.name)
+            if verbose:
+                print(f"Created temporary file: {temp}")
             print("Testing...")
             nano_sec: int = 0
             size: int = base_size
@@ -78,9 +88,11 @@ def speedtest_ssh(
             while int(1.5 * nano_sec) < remaining - 1:  # Try to get close to seconds
                 size *= 2 ** (0 if not nano_sec else max(1, int(log(remaining / nano_sec, 2))))
                 # ^ Faster than just *=2
-                up_t, down_t = _iteration(temp, remote, size)
+                up_t, down_t = _iteration(temp, remote, size, verbose)
                 nano_sec = up_t + down_t
                 remaining -= nano_sec
+    if verbose:
+        print(f"\n{'*'*30} Final Results {'*'*30}")
     _print_results(ping_delay, up_t, down_t, size)
 
 

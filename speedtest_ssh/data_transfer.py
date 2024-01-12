@@ -52,20 +52,26 @@ class DataTransfer:
         :param config: The Config object the DataTransfer instance should use
         :param verbose: If true, be more verbose
         """
+        self._verbose = verbose
         rand = lambda: random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits)
         self._remote_f: str = f"/tmp/speedtest-ssh_{datetime.now()}_{''.join(rand() for _ in range(8))}.tmp"
         self._remote_f = self._remote_f.replace(":", "-").replace(" ", "_")
         # We promise that _remote_f components match: ^[a-zA-Z\d_.-]+$ (old rsync args suck)
+        if self._verbose:
+            print("Parsing ssh config and loading keys...")
         self._sftp_cm = sftp_wrapper(config)
         self._sftp: SFTPClient  # Defined in __enter__
-        self._verbose = verbose
 
     def __enter__(self) -> DataTransfer:
+        if self._verbose:
+            print("Establishing SFTP connection...")
         self._sftp = self._sftp_cm.__enter__()
         return self
 
     def __exit__(self, *args, **kwargs):
         self.clean_remote()
+        if self._verbose:
+            print("Terminating SFTP connection...")
         self._sftp_cm.__exit__(*args, **kwargs)
 
     def put(self, local: Path) -> None:
@@ -85,6 +91,8 @@ class DataTransfer:
         Removes the remote file
         """
         try:
+            if self._verbose:
+                print(f"Removing remote file (if it exists): {self._remote_f}")
             self._sftp.remove(self._remote_f)
         except FileNotFoundError:
             pass

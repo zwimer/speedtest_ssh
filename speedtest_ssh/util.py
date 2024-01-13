@@ -1,3 +1,4 @@
+from logging import getLogger, DEBUG
 from pathlib import Path
 from shutil import which
 import subprocess
@@ -6,6 +7,9 @@ import os
 
 
 __all__ = ("find_exe", "run_cmd")
+
+
+_LOG = "Util"
 
 
 def find_exe(name: str) -> Path:
@@ -22,9 +26,41 @@ def find_exe(name: str) -> Path:
     return exe
 
 
-def run_cmd(cmd: Path, *args: str | Path, verbose: bool, **kwargs) -> subprocess.CompletedProcess:
-    full = (cmd, *args)
-    if verbose:
+def _log_cmd(cmd: Path, args: tuple[str | Path, ...]) -> None:
+    log = getLogger(_LOG)
+    if log.isEnabledFor(DEBUG):
+        full = (cmd, *args)
         msg = f"{'*'*30} Running Command: {cmd.name} {'*'*30}"
-        print(f"{msg}\n{' '.join(shlex.quote(str(i)) for i in full)}\n{'*'*len(msg)}")
-    return subprocess.run(full, **kwargs)
+        msg = f"{msg}\n{' '.join(shlex.quote(str(i)) for i in full)}\n{'*'*len(msg)}"
+        log.debug(msg)
+
+
+def run_cmd(cmd: Path, *args: str | Path, **kwargs) -> subprocess.CompletedProcess:
+    """
+    :param cmd: The command to run
+    :param args: The arguments of cmd
+    :param kwargs: Fowarded to subprocess.Popen
+    :return: Completed process
+    """
+    _log_cmd(cmd, args)
+    return subprocess.run((cmd, *args), **kwargs)
+
+
+def tee_cmd(cmd: Path, *args: str | Path, level: int, **kwargs) -> tuple[subprocess.Popen, str]:
+    """
+    :param cmd: The command to run (and info log the output of)
+    :param args: The arguments of cmd
+    :param level: The log level to use
+    :param kwargs: Fowarded to subprocess.Popen aside from test and stdout
+    :return: Completed process, stdout (do not read stdout from CompletedProcess)
+    """
+    assert "text" not in kwargs
+    assert "stdout" not in kwargs
+    log = getLogger(_LOG)
+    _log_cmd(cmd, args)
+    p = subprocess.Popen((cmd, *args), text=True, stdout=subprocess.PIPE, **kwargs)
+    stdout = ""
+    for line in p.stdout:  # type: ignore
+        log.log(level, line[:-1])
+        stdout += line
+    return p, stdout

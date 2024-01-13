@@ -1,10 +1,14 @@
-from subprocess import CalledProcessError, PIPE
+from subprocess import CalledProcessError
+from logging import INFO
 from sys import platform
 
-from .util import find_exe, run_cmd
+from .util import find_exe, tee_cmd
 
 
 __all__ = ("PingFailed", "ping")
+
+
+_LOG = "Ping"
 
 
 class PingFailed(RuntimeError):
@@ -13,7 +17,7 @@ class PingFailed(RuntimeError):
     """
 
 
-def ping(host: str, verbose: bool, n_pings: int = 10, max_wait: int = 3) -> float:
+def ping(host: str, n_pings: int = 10, max_wait: int = 3) -> float:
     """
     :param host: The host to ping
     :return: The number Ping host
@@ -22,16 +26,13 @@ def ping(host: str, verbose: bool, n_pings: int = 10, max_wait: int = 3) -> floa
     print("Pinging...")
     exe = find_exe("ping")
     try:
-        wait: str = ("-W" if platform == "darwin" else "-w") + str(max_wait)
-        q = [] if verbose else ["-q"]
-        p = run_cmd(exe, "-i.1", f"-c{n_pings}", wait, *q, host, verbose=verbose, stdout=PIPE)
+        wait: str = f"-W{max_wait*1000}" if platform == "darwin" else f"-w{max_wait}"
+        p, stdout = tee_cmd(exe, "-i.1", f"-c{n_pings}", wait, host, level=INFO)
         if p.returncode:
             raise PingFailed(f"{exe} exit code: {p.returncode}")
-        output: str = p.stdout.decode().strip()
+        output: str = stdout.strip()
     except CalledProcessError as e:
         raise PingFailed("Unkown error") from e
-    if verbose:
-        print(output)
     try:
         return float(output.split("/")[-3])
     except IndexError as e:

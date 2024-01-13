@@ -1,5 +1,6 @@
 from __future__ import annotations
 from subprocess import CalledProcessError, PIPE
+from logging import getLogger, DEBUG, INFO
 from typing import TYPE_CHECKING
 from datetime import datetime
 from pathlib import Path
@@ -46,31 +47,29 @@ class DataTransfer:
     This class is a context manager; on exit will remove the remote file on deletion
     """
 
-    def __init__(self, config: Config, verbose: bool):
+    _LOG = "DataTransfer"
+
+    def __init__(self, config: Config):
         """
         :param config: The Config object the DataTransfer instance should use
-        :param verbose: If true, be more verbose
         """
-        self._verbose = verbose
+        self._l = getLogger(self._LOG)
         rand = lambda: random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits)
         self._remote_f: str = f"/tmp/speedtest-ssh_{datetime.now()}_{''.join(rand() for _ in range(8))}.tmp"
         self._remote_f = self._remote_f.replace(":", "-").replace(" ", "_")
         # We promise that _remote_f components match: ^[a-zA-Z\d_.-]+$ (old rsync args suck)
-        if self._verbose:
-            print("Parsing ssh config and loading keys...")
+        self._l.debug("Parsing ssh config and loading keys...")
         self._sftp_cm = sftp_wrapper(config)
         self._sftp: SFTPClient  # Defined in __enter__
 
     def __enter__(self) -> DataTransfer:
-        if self._verbose:
-            print("Establishing SFTP connection...")
+        self._l.debug("Chosen remote file name: %s", self._remote_f)
         self._sftp = self._sftp_cm.__enter__()
         return self
 
     def __exit__(self, *args, **kwargs):
         self.clean_remote()
-        if self._verbose:
-            print("Terminating SFTP connection...")
+        self._l.debug("Terminating SFTP connection...")
         self._sftp_cm.__exit__(*args, **kwargs)
 
     def put(self, local: Path) -> None:
@@ -90,8 +89,7 @@ class DataTransfer:
         Removes the remote file
         """
         try:
-            if self._verbose:
-                print(f"Removing remote file (if it exists): {self._remote_f}")
+            self._l.debug("Removing remote file (if it exists): %s", self._remote_f)
             self._sftp.remove(self._remote_f)
         except FileNotFoundError:
             pass
@@ -117,22 +115,23 @@ class Rsync(DataTransfer):
     Requires rsync be installed
     """
 
-    def __init__(self, config: Config, verbose: bool):
+    def __init__(self, config: Config):
         """
         :param host: The hostname ssh uses for the remote client
-        :param verbose: If true, be more verbose
         """
-        super().__init__(config, verbose)
-        self._remote_f = re.sub("[^a-zA-Z\\d_-]", "_", self._remote_f)  # Old rsync args suck
+        super().__init__(config)
+        self._remote_f = re.sub(r"[^a-zA-Z\d_/-]", "_", self._remote_f)  # Old rsync args suck
         self._rsync = find_exe("rsync")
         # Determine rsync version
         try:
-            p = run_cmd(self._rsync, "--version", verbose=self._verbose, stdout=PIPE, check=True)
+            p = run_cmd(self._rsync, "--version", stdout=PIPE, check=True)
             output = p.stdout.decode().split("version")[1].split("protocol")[0].strip()
             version: tuple[int, ...] = tuple(int(i) for i in output.split("."))
             self._old = version <= (3, 1, 0)  # macOS has an old version by default
             if self._old:
                 print("\tOld version of rsync detected. Output will be more verbose.")
+            else:
+                self._l.debug("Newer version of rsync detected")
         except (CalledProcessError, KeyError) as e:
             raise RuntimeError(f"Could not determine rsync version from {self._rsync}") from e
         # Determine rsync command
@@ -143,8 +142,10 @@ class Rsync(DataTransfer):
             self._flags = [sshpass, "-e"] + self._flags  # type: ignore
             self._env["SSHPASS"] = config.password
         self._flags.extend(("-hh", "--progress" if self._old else "--info=progress2"))
-        if self._verbose:
-            self._flags.extend(["--verbose", "-vvv"])
+        if self._l.isEnabledFor(INFO):
+            self._flags.append("--verbose")
+        if self._l.isEnabledFor(DEBUG):
+            self._flags.append("-vvv")
         if config.port is not None:
             self._flags.append(f"--port={config.port}")
         # Determine host info
@@ -156,7 +157,7 @@ class Rsync(DataTransfer):
         :param dst: The location to rsync src to
         """
         try:
-            _ = run_cmd(self._rsync, *self._flags, src, dst, verbose=self._verbose, env=self._env, check=True)
+            _ = run_cmd(self._rsync, *self._flags, src, dst, env=self._env, check=True)
         except CalledProcessError as e:
             raise RuntimeError("Failed to transfer data during speed test") from e
 

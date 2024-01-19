@@ -109,7 +109,7 @@ def main(argv: list[str]) -> None:
         "--num-seconds", type=int, default=20, help="An approximate number of seconds the speed tests should take"
     )
     parser.add_argument(
-        "-m", "--mode", choices=["rsync", "sftp"], default="rsync", help="The speedtest method. Defaults to rsync"
+        "-m", "--mode", choices=["rsync", "sftp"], default="sftp", help="The speedtest method. Defaults to rsync"
     )
     ns = vars(parser.parse_args(argv[1:]))
     basicConfig(level=WARNING, format="%(message)s")

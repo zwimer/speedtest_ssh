@@ -22,6 +22,13 @@ if TYPE_CHECKING:
 __all__ = ("DataTransfer", "SFTP", "Rsync")
 
 
+_dict = string.ascii_uppercase + string.ascii_lowercase + string.digits
+
+
+def _rand_str(size: int) -> str:
+    return "".join(random.choice(_dict) for _ in range(size))  # nosec B311
+
+
 class ProgressBar(tqdm):
     """
     A small tqdm wrapper for paramiko's SFTP callbacks to use
@@ -43,7 +50,7 @@ class ProgressBar(tqdm):
 
 class DataTransfer:
     """
-    A context mananger used to send and receive data to and from the remote client
+    A context manager used to send and receive data to and from the remote client
     This class is a context manager; on exit will remove the remote file on deletion
     """
 
@@ -54,8 +61,7 @@ class DataTransfer:
         :param config: The Config object the DataTransfer instance should use
         """
         self._l = getLogger(self._LOG)
-        rand = lambda: random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits)
-        self._remote_f: str = f"/tmp/speedtest-ssh_{datetime.now()}_{''.join(rand() for _ in range(8))}.tmp"
+        self._remote_f: str = f"/tmp/speedtest-ssh_{datetime.now()}_{_rand_str(8)}.tmp"
         self._remote_f = self._remote_f.replace(":", "-").replace(" ", "_")
         # We promise that _remote_f components match: ^[a-zA-Z\d_.-]+$ (old rsync args suck)
         self._l.debug("Parsing ssh config and loading keys...")

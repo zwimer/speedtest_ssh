@@ -58,3 +58,10 @@ ignore = ["E731"]
 line-length = 120
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
+
+[tool.bandit]
+skips = ["B404", "B108"]
+
+[tool.vulture]
+ignore_names = ["cli"]
+paths = ["speedtest_ssh"]

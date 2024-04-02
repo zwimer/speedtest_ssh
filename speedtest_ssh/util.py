@@ -43,7 +43,7 @@ def run_cmd(cmd: Path, *args: str | Path, **kwargs) -> subprocess.CompletedProce
     :return: Completed process
     """
     _log_cmd(cmd, args)
-    return subprocess.run((cmd, *args), **kwargs)
+    return subprocess.run((cmd, *args), **kwargs)  # nosec B603
 
 
 def tee_cmd(cmd: Path, *args: str | Path, level: int, **kwargs) -> tuple[subprocess.Popen, str]:
@@ -54,11 +54,11 @@ def tee_cmd(cmd: Path, *args: str | Path, level: int, **kwargs) -> tuple[subproc
     :param kwargs: Fowarded to subprocess.Popen aside from test and stdout
     :return: Completed process, stdout (do not read stdout from CompletedProcess)
     """
-    assert "text" not in kwargs
-    assert "stdout" not in kwargs
+    assert "text" not in kwargs  # nosec B101
+    assert "stdout" not in kwargs  # nosec B101
     log = getLogger(_LOG)
     _log_cmd(cmd, args)
-    p = subprocess.Popen((cmd, *args), text=True, stdout=subprocess.PIPE, **kwargs)
+    p = subprocess.Popen((cmd, *args), text=True, stdout=subprocess.PIPE, **kwargs)  # nosec B603
     stdout = ""
     for line in p.stdout:  # type: ignore
         log.log(level, line[:-1])

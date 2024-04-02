@@ -15,7 +15,7 @@ from ._version import __version__
 
 
 base_size = 2 * (1024**2)
-_password_env_name = "SPEEDTEST_SSH_PASSWORD"
+_password_env_name = "SPEEDTEST_SSH_PASSWORD"  # nosec B105
 _LOG = "speedtest_ssh"
 
 

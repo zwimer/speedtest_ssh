@@ -5,7 +5,6 @@ from pathlib import Path
 import argparse
 import math
 import time
-import sys
 import os
 
 from .config import Config
@@ -16,6 +15,7 @@ from ._version import __version__
 
 base_size = 2 * (1024**2)
 _password_env_name = "SPEEDTEST_SSH_PASSWORD"  # nosec B105
+_LOG_VERBOSITY: dict[int, int] = {0: WARNING, 1: INFO, 2: DEBUG}
 _LOG = "speedtest_ssh"
 
 
@@ -63,7 +63,7 @@ def _print_results(ping_delay: float | None, up_ns: int, down_ns: int, size: int
     print(f"{prefix}Upload Speed: {fmt(up_ns)}\nDownload Speed: {fmt(down_ns)}")
 
 
-def speedtest_ssh(num_seconds: int, ping: bool, mode: str, conf: Config) -> None:
+def speedtest_ssh(seconds: int, ping: bool, mode: str, conf: Config) -> None:
     """
     Run speedtest_ssh
     """
@@ -78,7 +78,7 @@ def speedtest_ssh(num_seconds: int, ping: bool, mode: str, conf: Config) -> None
             print("Testing...")
             nano_sec: int = 0
             size: int = base_size
-            remaining: int = int(1e9) * num_seconds
+            remaining: int = int(1e9) * seconds
             while int(1.5 * nano_sec) < remaining - 1:  # Try to get close to seconds
                 size *= 2 ** (0 if not nano_sec else max(1, int(math.log(remaining / nano_sec, 2))))
                 # ^ Faster than just *=2
@@ -89,51 +89,48 @@ def speedtest_ssh(num_seconds: int, ping: bool, mode: str, conf: Config) -> None
     _print_results(ping_delay, up_t, down_t, size)
 
 
-def main(argv: list[str]) -> None:
+def cli() -> None:
     """
-    speedtest_ssh from arguments
+    speedtest_ssh main
     """
-    base: str = os.path.basename(argv[0])
-    parser = argparse.ArgumentParser(prog=base)
-    parser.add_argument("--version", action="version", version=f"{base} {__version__}")
-    parser.add_argument("host", help="The host to speedtest the conection to")
-    parser.add_argument("--ping", action="store_true", help="Ping test the host as well")
-    parser.add_argument("--verbose", action="store_true", help="Be verbose")
-    parser.add_argument("--very-verbose", action="store_true", help="Be very verbose")
-    parser.add_argument("-u", "--user", help="The user used for ssh")
-    parser.add_argument(
-        "--password-env", action="store_true", help=f"Read password from {_password_env_name} environment variable"
-    )
-    parser.add_argument("-p", "--port", type=int, help="The port used for ssh")
-    parser.add_argument(
-        "--num-seconds", type=int, default=20, help="An approximate number of seconds the speed tests should take"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-V", "--version", action="version", version=f"{parser.prog} {__version__}")
+    remote = parser.add_argument_group("SSH Options")
+    remote.add_argument("host", help="The host to speedtest the conection to")
+    remote.add_argument("-u", "--user", help="The user used for ssh")
+    remote.add_argument("-p", "--port", type=int, help="The port used for ssh")
+    remote.add_argument(
+        "-E",
+        "--password-env",
+        action="store_true",
+        help=f"Read password from {_password_env_name} environment variable",
     )
     parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase Log verbosity, pass more than once to increase verbosity",
+    )
+    modes = parser.add_argument_group("SpeedTest Options")
+    modes.add_argument("-P", "--ping", action="store_true", help="Ping test the host as well")
+    modes.add_argument(
+        "-s", "--seconds", type=int, default=20, help="An approximate number of seconds the speed tests should take"
+    )
+    modes.add_argument(
         "-m", "--mode", choices=["rsync", "sftp"], default="sftp", help="The speedtest method. Defaults to rsync"
     )
-    ns = vars(parser.parse_args(argv[1:]))
-    basicConfig(level=WARNING, format="%(message)s")
-    log = getLogger(_LOG)
-    if ns.pop("verbose"):
-        getLogger().setLevel(INFO)
-    if ns.pop("very_verbose"):
-        getLogger().setLevel(DEBUG)
-        log.debug("Very verbose logging enabled")
+    ns = vars(parser.parse_args())
+    # Configure logging
+    lvl = ns.pop("verbose")
+    lvl = _LOG_VERBOSITY[max(i for i in _LOG_VERBOSITY if i <= lvl)]
+    basicConfig(level=lvl, format="%(levelname)-8s %(message)s")
+    getLogger("main").debug("Log level set to %d", lvl)
+    # Call speedtest
     ns["password"] = None
     if ns.pop("password_env"):
         ns["password"] = os.environ.get(_password_env_name, None)
         if ns["password"] is None:
             raise RuntimeError(f"{_password_env_name} is not set")
     conf = Config(**{i.name: ns.pop(i.name) for i in fields(Config)})  # type: ignore
-    return speedtest_ssh(**ns, conf=conf)  # type: ignore
-
-
-def cli() -> None:
-    """
-    speedtest_ssh CLI
-    """
-    main(sys.argv)
-
-
-if __name__ == "__main__":
-    cli()
+    speedtest_ssh(**ns, conf=conf)  # type: ignore

@@ -7,6 +7,8 @@ import math
 import time
 import os
 
+import argcomplete
+
 from .config import Config
 from .data_transfer import DataTransfer, SFTP, Rsync
 from .ping import ping as ping_test
@@ -120,6 +122,7 @@ def cli() -> None:
     modes.add_argument(
         "-m", "--mode", choices=["rsync", "sftp"], default="sftp", help="The speedtest method. Defaults to rsync"
     )
+    argcomplete.autocomplete(parser)  # Tab completion
     ns = vars(parser.parse_args())
     # Configure logging
     lvl = ns.pop("verbose")

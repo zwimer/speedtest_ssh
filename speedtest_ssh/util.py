@@ -5,7 +5,6 @@ import subprocess
 import shlex
 import os
 
-
 __all__ = ("find_exe", "run_cmd")
 
 
@@ -43,7 +42,7 @@ def run_cmd(cmd: Path, *args: str | Path, **kwargs) -> subprocess.CompletedProce
     :return: Completed process
     """
     _log_cmd(cmd, args)
-    return subprocess.run((cmd, *args), **kwargs)  # nosec B603
+    return subprocess.run((cmd, *args), **kwargs)  # nosec B603  # noqa: PLW1510
 
 
 def tee_cmd(cmd: Path, *args: str | Path, level: int, **kwargs) -> tuple[subprocess.Popen, str]:

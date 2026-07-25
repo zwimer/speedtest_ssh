@@ -1,8 +1,8 @@
 from __future__ import annotations
 from subprocess import CalledProcessError, PIPE
 from logging import getLogger, DEBUG, INFO
-from typing import TYPE_CHECKING
-from datetime import datetime
+from typing import TYPE_CHECKING, Self
+from datetime import UTC, datetime
 from pathlib import Path
 import random
 import string
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from paramiko import SFTPClient
 
 
-__all__ = ("DataTransfer", "SFTP", "Rsync")
+__all__ = ("SFTP", "DataTransfer", "Rsync")
 
 
 _dict = string.ascii_uppercase + string.ascii_lowercase + string.digits
@@ -61,14 +61,14 @@ class DataTransfer:
         :param config: The Config object the DataTransfer instance should use
         """
         self._l = getLogger(self._LOG)
-        self._remote_f: str = f"/tmp/speedtest-ssh_{datetime.now()}_{_rand_str(8)}.tmp"
+        self._remote_f: str = f"/tmp/speedtest-ssh_{datetime.now(tz=UTC)}_{_rand_str(8)}.tmp"
         self._remote_f = self._remote_f.replace(":", "-").replace(" ", "_")
         # We promise that _remote_f components match: ^[a-zA-Z\d_.-]+$ (old rsync args suck)
         self._l.debug("Parsing ssh config and loading keys...")
         self._sftp_cm = sftp_wrapper(config)
         self._sftp: SFTPClient  # Defined in __enter__
 
-    def __enter__(self) -> DataTransfer:
+    def __enter__(self) -> Self:
         self._l.debug("Chosen remote file name: %s", self._remote_f)
         self._sftp = self._sftp_cm.__enter__()
         return self

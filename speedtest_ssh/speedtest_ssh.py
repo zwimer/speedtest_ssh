@@ -14,7 +14,6 @@ from .data_transfer import DataTransfer, SFTP, Rsync
 from .ping import ping as ping_test
 from ._version import __version__
 
-
 base_size = 2 * (1024**2)
 _password_env_name = "SPEEDTEST_SSH_PASSWORD"  # nosec B105
 _LOG_VERBOSITY: dict[int, int] = {0: WARNING, 1: INFO, 2: DEBUG}
@@ -72,21 +71,23 @@ def speedtest_ssh(seconds: int, ping: bool, mode: str, conf: Config) -> None:
     log = getLogger(_LOG)
     ping_delay: float | None = ping_test(conf.host) if ping else None
     print("Connecting...")
-    with (Rsync if mode == "rsync" else SFTP)(conf) as remote:
-        with NTF(prefix="speedtest_ssh.", dir="/tmp", delete_on_close=False) as ntf:
-            ntf.close()
-            temp = Path(ntf.name)
-            log.debug("Created temporary file: %s", temp)
-            print("Testing...")
-            nano_sec: int = 0
-            size: int = base_size
-            remaining: int = int(1e9) * seconds
-            while int(1.5 * nano_sec) < remaining - 1:  # Try to get close to seconds
-                size *= 2 ** (0 if not nano_sec else max(1, int(math.log(remaining / nano_sec, 2))))
-                # ^ Faster than just *=2
-                up_t, down_t = _iteration(temp, remote, size)
-                nano_sec = up_t + down_t
-                remaining -= nano_sec
+    with (
+        (Rsync if mode == "rsync" else SFTP)(conf) as remote,
+        NTF(prefix="speedtest_ssh.", dir="/tmp", delete_on_close=False) as ntf,
+    ):
+        ntf.close()
+        temp = Path(ntf.name)
+        log.debug("Created temporary file: %s", temp)
+        print("Testing...")
+        nano_sec: int = 0
+        size: int = base_size
+        remaining: int = int(1e9) * seconds
+        while int(1.5 * nano_sec) < remaining - 1:  # Try to get close to seconds
+            size *= 2 ** (0 if not nano_sec else max(1, int(math.log2(remaining / nano_sec))))
+            # ^ Faster than just *=2
+            up_t, down_t = _iteration(temp, remote, size)
+            nano_sec = up_t + down_t
+            remaining -= nano_sec
     log.debug(f"\n{'*'*30} Final Results {'*'*30}")
     _print_results(ping_delay, up_t, down_t, size)
 

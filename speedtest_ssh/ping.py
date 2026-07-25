@@ -4,7 +4,6 @@ from sys import platform
 
 from .util import find_exe, tee_cmd
 
-
 __all__ = ("PingFailed", "ping")
 
 

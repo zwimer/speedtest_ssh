@@ -21,9 +21,10 @@ _LOG = "SFTPWrapper"
 
 
 def create_paramiko_config(raw: Config) -> dict:
-    """
-    Create a dict for paramiko to use as its config
-    :return: A dict containing info needed for paramiko to ssh
+    """Create a dict for paramiko to use as its config
+
+    Returns:
+        A dict containing info needed for paramiko to ssh
     """
     log = getLogger(_LOG)
     config: dict[str, str | int | None] = dataclasses.asdict(raw)
@@ -56,9 +57,7 @@ def create_paramiko_config(raw: Config) -> dict:
 
 
 def load_keys(client: SSHClient, host: str, port: int) -> None:
-    """
-    Load available ssh keys into the ssh client
-    """
+    """Load available ssh keys into the ssh client"""
     log = getLogger(_LOG)
     hosts_f = Path.home() / ".ssh/known_hosts"
     if hosts_f.exists():
@@ -74,9 +73,7 @@ def load_keys(client: SSHClient, host: str, port: int) -> None:
 
 @contextmanager
 def sftp_wrapper(raw: Config) -> Generator["SFTPClient", None, None]:
-    """
-    A context manager which yields a conncted SFTPClient
-    """
+    """A context manager which yields a conncted SFTPClient"""
     log = getLogger(_LOG)
     log.debug("Initializing ssh client")
     with SSHClient() as client:

@@ -13,8 +13,11 @@ _LOG = "Util"
 
 def find_exe(name: str) -> Path:
     """
-    :param name: The name of the executable to find
-    :return: The path to the executable
+    Args:
+        name: The name of the executable to find
+
+    Returns:
+        The path to the executable
     """
     where: str | None = which(name)
     if where is None:
@@ -36,10 +39,13 @@ def _log_cmd(cmd: Path, args: tuple[str | Path, ...]) -> None:
 
 def run_cmd(cmd: Path, *args: str | Path, **kwargs) -> subprocess.CompletedProcess:
     """
-    :param cmd: The command to run
-    :param args: The arguments of cmd
-    :param kwargs: Fowarded to subprocess.Popen
-    :return: Completed process
+    Args:
+        cmd: The command to run
+        *args: The arguments of cmd
+        **kwargs: Fowarded to subprocess.Popen
+
+    Returns:
+        Completed process
     """
     _log_cmd(cmd, args)
     return subprocess.run((cmd, *args), **kwargs)  # nosec B603  # noqa: PLW1510
@@ -47,11 +53,14 @@ def run_cmd(cmd: Path, *args: str | Path, **kwargs) -> subprocess.CompletedProce
 
 def tee_cmd(cmd: Path, *args: str | Path, level: int, **kwargs) -> tuple[subprocess.Popen, str]:
     """
-    :param cmd: The command to run (and info log the output of)
-    :param args: The arguments of cmd
-    :param level: The log level to use
-    :param kwargs: Fowarded to subprocess.Popen aside from test and stdout
-    :return: Completed process, stdout (do not read stdout from CompletedProcess)
+    Args:
+        cmd: The command to run (and info log the output of)
+        *args: The arguments of cmd
+        level: The log level to use
+        **kwargs: Fowarded to subprocess.Popen aside from test and stdout
+
+    Returns:
+        Completed process, stdout (do not read stdout from CompletedProcess)
     """
     assert "text" not in kwargs  # nosec B101
     assert "stdout" not in kwargs  # nosec B101

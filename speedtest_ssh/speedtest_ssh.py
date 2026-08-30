@@ -21,12 +21,15 @@ _LOG = "speedtest_ssh"
 
 
 def _iteration(temp: Path, client: DataTransfer, size: int) -> tuple[int, int]:
-    """
-    Time uploading and downloading a file of size bytes
-    :param temp: A temporary file we have ownership of
-    :param client: A client used to transfer the data
-    :param size: how much data to transfer
-    :return: <nanoseconds to upload>, <nanoseconds to download>
+    """Time uploading and downloading a file of size bytes
+
+    Args:
+        temp: A temporary file we have ownership of
+        client: A client used to transfer the data
+        size: how much data to transfer
+
+    Returns:
+        <nanoseconds to upload>, <nanoseconds to download>
     """
     # Create the file to upload; sendfile not always supported so we do this the hard way
     log = getLogger(_LOG)
@@ -56,18 +59,14 @@ def _iteration(temp: Path, client: DataTransfer, size: int) -> tuple[int, int]:
 
 
 def _print_results(ping_delay: float | None, up_ns: int, down_ns: int, size: int) -> None:
-    """
-    Print the speed test results
-    """
+    """Print the speed test results"""
     prefix = "\n" + ("" if ping_delay is None else f"Ping: {ping_delay} ms\n")
     fmt = lambda s: f"{8 * (size/1024**2) / (s/1000**3):.2f} Mbit/s"
     print(f"{prefix}Upload Speed: {fmt(up_ns)}\nDownload Speed: {fmt(down_ns)}")
 
 
 def speedtest_ssh(seconds: int, ping: bool, mode: str, conf: Config) -> None:
-    """
-    Run speedtest_ssh
-    """
+    """Run speedtest_ssh"""
     log = getLogger(_LOG)
     ping_delay: float | None = ping_test(conf.host) if ping else None
     print("Connecting...")
@@ -93,9 +92,7 @@ def speedtest_ssh(seconds: int, ping: bool, mode: str, conf: Config) -> None:
 
 
 def cli() -> None:
-    """
-    speedtest_ssh main
-    """
+    """speedtest_ssh main"""
     parser = argparse.ArgumentParser()
     parser.add_argument("-V", "--version", action="version", version=f"{parser.prog} {__version__}")
     remote = parser.add_argument_group("SSH Options")

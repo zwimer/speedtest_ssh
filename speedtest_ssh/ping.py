@@ -11,15 +11,16 @@ _LOG = "Ping"
 
 
 class PingFailed(RuntimeError):
-    """
-    Raise on ping failure
-    """
+    """Raise on ping failure"""
 
 
 def ping(host: str, n_pings: int = 10, max_wait: int = 3) -> float:
     """
-    :param host: The host to ping
-    :return: The number Ping host
+    Args:
+        host: The host to ping
+
+    Returns:
+        The number Ping host
     """
     # We use subprocess b/c ping is suid and we don't want to require root
     print("Pinging...")

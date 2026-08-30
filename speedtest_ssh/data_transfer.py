@@ -30,17 +30,16 @@ def _rand_str(size: int) -> str:
 
 
 class ProgressBar(tqdm):
-    """
-    A small tqdm wrapper for paramiko's SFTP callbacks to use
-    """
+    """A small tqdm wrapper for paramiko's SFTP callbacks to use"""
 
     def __init__(self, desc: str):
         super().__init__(desc=desc, unit="B", unit_scale=True, unit_divisor=1024, dynamic_ncols=True)
 
     def __call__(self, bytes_done: int, bytes_remaining: int):
         """
-        :param bytes_done: The number of bytes transferred
-        :param bytes_remaining: The number of bytes yet to be transferred
+        Args:
+            bytes_done: The number of bytes transferred
+            bytes_remaining: The number of bytes yet to be transferred
         """
         self.total: int | None
         if self.total is None:
@@ -49,8 +48,7 @@ class ProgressBar(tqdm):
 
 
 class DataTransfer:
-    """
-    A context manager used to send and receive data to and from the remote client
+    """A context manager used to send and receive data to and from the remote client
     This class is a context manager; on exit will remove the remote file on deletion
     """
 
@@ -58,7 +56,8 @@ class DataTransfer:
 
     def __init__(self, config: Config):
         """
-        :param config: The Config object the DataTransfer instance should use
+        Args:
+            config: The Config object the DataTransfer instance should use
         """
         self._l = getLogger(self._LOG)
         self._remote_f: str = f"/tmp/speedtest-ssh_{datetime.now(tz=UTC)}_{_rand_str(8)}.tmp"
@@ -79,21 +78,15 @@ class DataTransfer:
         self._sftp_cm.__exit__(*args, **kwargs)
 
     def put(self, local: Path) -> None:
-        """
-        Send the local file to be saved at the remote path
-        """
+        """Send the local file to be saved at the remote path"""
         raise NotImplementedError
 
     def get(self, local: Path) -> None:
-        """
-        Get the remote file to and save it at the local path
-        """
+        """Get the remote file to and save it at the local path"""
         raise NotImplementedError
 
     def clean_remote(self) -> None:
-        """
-        Removes the remote file
-        """
+        """Removes the remote file"""
         try:
             self._l.debug("Removing remote file (if it exists): %s", self._remote_f)
             self._sftp.remove(self._remote_f)
@@ -102,9 +95,7 @@ class DataTransfer:
 
 
 class SFTP(DataTransfer):
-    """
-    A DataTransfer classes that uses SFTP
-    """
+    """A DataTransfer classes that uses SFTP"""
 
     def put(self, local: Path) -> None:
         with ProgressBar("Upload   ") as p:
@@ -116,14 +107,14 @@ class SFTP(DataTransfer):
 
 
 class Rsync(DataTransfer):
-    """
-    A DataTransfer that uses rsync
+    """A DataTransfer that uses rsync
     Requires rsync be installed
     """
 
     def __init__(self, config: Config):
         """
-        :param host: The hostname ssh uses for the remote client
+        Args:
+            host: The hostname ssh uses for the remote client
         """
         super().__init__(config)
         self._remote_f = re.sub(r"[^a-zA-Z\d_/-]", "_", self._remote_f)  # Old rsync args suck
@@ -159,8 +150,9 @@ class Rsync(DataTransfer):
 
     def _transfer(self, src: str | Path, dst: str | Path) -> None:
         """
-        :param src: The file to rsync to dst
-        :param dst: The location to rsync src to
+        Args:
+            src: The file to rsync to dst
+            dst: The location to rsync src to
         """
         try:
             _ = run_cmd(self._rsync, *self._flags, src, dst, env=self._env, check=True)

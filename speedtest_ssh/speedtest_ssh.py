@@ -125,7 +125,7 @@ def cli() -> None:
     # Configure logging
     lvl = ns.pop("verbose")
     lvl = _LOG_VERBOSITY[max(i for i in _LOG_VERBOSITY if i <= lvl)]
-    basicConfig(level=lvl, format="%(levelname)-8s %(message)s")
+    basicConfig(level=lvl, format="%(levelname)-7s - %(message)s")
     getLogger("main").debug("Log level set to %d", lvl)
     # Call speedtest
     ns["password"] = None

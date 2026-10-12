@@ -49,6 +49,8 @@ disable = [
 	"line-too-long",
 	"invalid-name",
 ]
+[tool.pylint.main]
+jobs = 0
 
 [tool.black]
 line-length = 120

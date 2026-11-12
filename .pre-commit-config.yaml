@@ -16,17 +16,17 @@ repos:
     -   id: mixed-line-ending
     -   id: trailing-whitespace
 -   repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
+    rev: v3.22.0
     hooks:
     -   id: pyupgrade
-        args: [--py312-plus]
+        args: [--py314-plus]
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.3.0
+    rev: v2.4.1
     hooks:
     -   id: mypy
         additional_dependencies: [types-paramiko]
 -   repo: https://github.com/betterleaks/betterleaks
-    rev: v1.7.2
+    rev: v2.0.0-rc.7
     hooks:
     -   id: betterleaks
 
@@ -35,7 +35,7 @@ repos:
 #
 
 -   repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.25
+    rev: v0.27
     hooks:
     - id: validate-pyproject
       fail_fast: true
@@ -68,7 +68,7 @@ repos:
 
 # Last modifier: Coding Standard
 -   repo: https://github.com/psf/black
-    rev: 26.5.1
+    rev: 26.10.1
     hooks:
     -   id: black
 
@@ -93,12 +93,7 @@ repos:
       - id: vulture
 
 -   repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.16.0
-    hooks:
-    - id: ruff
-
--   repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.16.0
+    rev: v0.17.4
     hooks:
     - id: ruff
 

@@ -72,7 +72,7 @@ def load_keys(client: SSHClient, host: str, port: int) -> None:
 
 
 @contextmanager
-def sftp_wrapper(raw: Config) -> Generator["SFTPClient", None, None]:
+def sftp_wrapper(raw: Config) -> Generator[SFTPClient]:
     """A context manager which yields a conncted SFTPClient"""
     log = getLogger(_LOG)
     log.debug("Initializing ssh client")

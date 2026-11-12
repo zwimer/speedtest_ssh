@@ -1,4 +1,3 @@
-from __future__ import annotations
 from subprocess import CalledProcessError, PIPE
 from logging import getLogger, DEBUG, INFO
 from typing import TYPE_CHECKING, Self
